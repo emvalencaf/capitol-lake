@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# pre-commit: Python lint/format, Unicode check, OKF documentation update.
+# Skip the OKF step with SKIP_WIKI_UPDATE=1.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+mapfile -t staged < <(git diff --cached --name-only --diff-filter=ACM)
+[[ ${#staged[@]} -eq 0 ]] && exit 0
+
+# 1. Unicode: valid, NFC-normalized UTF-8 without invisible/bidi characters.
+uv run scripts/check_unicode.py "${staged[@]}"
+
+# 2. Python: lint and formatting (ruff).
+mapfile -t py < <(printf '%s\n' "${staged[@]}" | grep -E '\.pyi?$' || true)
+if [[ ${#py[@]} -gt 0 ]]; then
+  uvx ruff check --force-exclude "${py[@]}"
+  uvx ruff format --check --force-exclude "${py[@]}"
+fi
+
+# 3. OKF: keep .wiki/ in sync when code changed but the bundle did not.
+if [[ -d .wiki && -z "${SKIP_WIKI_UPDATE:-}" ]]; then
+  code_changed=$(printf '%s\n' "${staged[@]}" | grep -vE '^(\.wiki/|\.github/|\.githooks/|\.agents/|\.claude/)|\.md$' || true)
+  okf_staged=$(printf '%s\n' "${staged[@]}" | grep -E '^\.wiki/' || true)
+  if [[ -n "$code_changed" && -z "$okf_staged" ]]; then
+    if command -v claude >/dev/null 2>&1; then
+      echo "pre-commit: updating .wiki/ for staged changes..." >&2
+      diff="$(git diff --cached -- . ':!.wiki')"
+      validate=(uv run .agents/skills/validate/scripts/okf_validate.py .wiki --strict)
+      ask() {
+        claude -p "$1" --allowedTools "Read Grep Glob Write Edit" >&2
+      }
+      ask "Read .agents/skills/okf/SKILL.md and follow its maintain mode to update the .wiki/ bundle so it reflects the staged change below. Copy .agents/skills/okf/templates/concept.md for new concepts. Write generated.by as 'claude-code/pre-commit'. Only edit files under .wiki/ and append a log.md entry. Do not run commands; the hook validates afterwards.
+
+Staged diff:
+$diff"
+      # Validate; give the model one chance to fix what the validator reports.
+      if ! report="$("${validate[@]}" 2>&1)"; then
+        ask "The .wiki/ bundle failed validation. Fix every error and warning, editing only .wiki/:
+
+$report"
+      fi
+      git add .wiki
+    else
+      echo "pre-commit: code changed but .wiki/ was not updated (claude CLI not found)." >&2
+      echo "  update .wiki/ manually or commit with SKIP_WIKI_UPDATE=1" >&2
+      exit 1
+    fi
+  fi
+  # Always validate the bundle when it is part of the commit.
+  if git diff --cached --name-only | grep -q '^\.wiki/'; then
+    uv run .agents/skills/validate/scripts/okf_validate.py .wiki --strict
+  fi
+fi

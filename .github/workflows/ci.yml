@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [development, master]
+
+permissions:
+  contents: read
+
+jobs:
+  pr-target:
+    name: PR target
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only development may target master
+        if: github.base_ref == 'master' && github.head_ref != 'development'
+        run: |
+          echo "::error::PRs into master must come from development (see CONTRIBUTING.md)"
+          exit 1
+
+  checks:
+    name: Unicode, ruff, wiki
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Unicode
+        run: git ls-files -z | xargs -0 uv run scripts/check_unicode.py
+      - name: Ruff lint
+        run: uvx ruff check .
+      - name: Ruff format
+        run: uvx ruff format --check .
+      - name: Wiki bundle
+        run: |
+          if [ -d .wiki ]; then
+            uv run .agents/skills/validate/scripts/okf_validate.py .wiki --strict
+          fi
+
+  commits:
+    name: Commit messages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate commit format
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          status=0
+          for sha in $(git rev-list --no-merges "$BASE..$HEAD"); do
+            git log -n1 --format=%B "$sha" > "$RUNNER_TEMP/msg"
+            if ! .githooks/commit-msg "$RUNNER_TEMP/msg"; then
+              echo "::error::commit $sha does not follow CONTRIBUTING.md"
+              status=1
+            fi
+          done
+          exit $status

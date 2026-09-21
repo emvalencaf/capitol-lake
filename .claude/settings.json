@@ -1,0 +1,6 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": "bash -c 'exec \"$(git rev-parse --show-toplevel)/scripts/statusline.sh\"'"
+  }
+}

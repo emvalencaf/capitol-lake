@@ -1,0 +1,5 @@
+interface:
+  display_name: "Setup Project Harness"
+  short_description: "Name the project, set code standards and configure the skills"
+policy:
+  allow_implicit_invocation: false
