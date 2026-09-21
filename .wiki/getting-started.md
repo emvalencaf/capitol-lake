@@ -1,7 +1,7 @@
 ---
 type: Reference
-title: Getting started — Project knowledge
-description: Starting point for the Project knowledge OKF bundle.
+title: Getting started — Capitol Lake
+description: Starting point for the Capitol Lake OKF bundle.
 tags:
 - getting-started
 status: stable

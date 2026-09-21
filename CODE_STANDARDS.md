@@ -1,8 +1,8 @@
 # Code Standards
 
-These standards apply to everything committed here. Sections marked *(stack)*
-are placeholders: replace them with your project's language, formatter, linter
-and test conventions when you start from this template.
+These standards apply to everything committed here. Tool settings live in
+`pyproject.toml`, which is the source of truth; this file names them instead of
+repeating values.
 
 ## General
 
@@ -17,8 +17,10 @@ and test conventions when you start from this template.
 - Lint and format: `ruff` (config in `pyproject.toml`), enforced by the `pre-commit` hook.
 - Encoding: UTF-8, NFC-normalized, no BOM, no zero-width or bidi control characters
   (enforced by `scripts/check_unicode.py`).
-- Test command: _to be defined_
-- Directory layout: _to be defined_
+- Tests: `pytest` (dev dependency), run with `uv run pytest`; tests live in `tests/`.
+- Type checker: none.
+- Docstrings: no fixed style; names and tests carry the intent.
+- Directory layout: `src/<package>/` layout.
 
 ## Documentation
 
