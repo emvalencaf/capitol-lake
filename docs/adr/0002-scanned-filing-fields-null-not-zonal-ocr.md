@@ -1,0 +1,5 @@
+# Accept null transaction type and cap-gains flag for scanned filings, no zonal OCR
+
+Full-page Tesseract OCR on scanned House PTRs (~13% of filings) produces garbled multi-column noise for the `transaction_type` and `cap_gains` columns, while asset name and dates survive. A fixed-crop "zonal OCR" pass per column could recover them, but it rests on an unverified assumption (the paper form layout is identical across years/filers) and would need calibration work with no existing crop code — an uncertain-effort spike outside the ~6h/week, free-tools-only budget for Phase 1+2.
+
+Decided: extraction reports `transaction_type` and `cap_gains` as null with low confidence for scanned filings; the silver schema's per-field confidence/provenance columns make this an honest result, not a defect. `transaction_type` is still scored in the evaluation set (issue #8) with a digital/scanned breakdown, so the near-zero scanned accuracy for that field is visible by design. Zonal OCR, and the form-layout verification it would require, is deferred to a later phase.
