@@ -1,0 +1,71 @@
+{
+    "draw": 1,
+    "recordsTotal": 3867,
+    "recordsFiltered": 3867,
+    "data": [
+        [
+            "ANDREW LAMAR",
+            "ALEXANDER",
+            "Senator",
+            "<a href=\"/search/view/paper/2701724B-A03B-4738-8E28-15D9FBBADEFE/\" target=\"_blank\">Annual Report</a>",
+            "05/15/2012"
+        ],
+        [
+            "ANDREW LAMAR",
+            "ALEXANDER",
+            "Senator",
+            "<a href=\"/search/view/paper/0DAB9BAF-F4DA-4214-B875-A077BA158CAF/\" target=\"_blank\">Annual Report</a>",
+            "05/15/2013"
+        ],
+        [
+            "Angela D",
+            "Alsobrooks",
+            "Alsobrooks, Angela (Senator)",
+            "<a href=\"/search/view/annual/bfbd49d0-5e32-4f06-9044-a034f48efd18/\" target=\"_blank\">Annual Report for CY 2025</a>",
+            "08/13/2026"
+        ],
+        [
+            "Angela D",
+            "Alsobrooks",
+            "Alsobrooks, Angela (Senator)",
+            "<a href=\"/search/view/extension-notice/regular/b7f66cc0-a619-4895-a4df-30b4e35c56ce/\" target=\"_blank\">Annual Report for 2024 Due Date Extension 1</a>",
+            "05/09/2025"
+        ],
+        [
+            "Alan",
+            "Armstrong",
+            "Armstrong, Alan (Senator)",
+            "<a href=\"/search/view/extension-notice/regular/9d2483b3-9693-4f93-ac49-5326c4a53464/\" target=\"_blank\">New Filer Report for 2026 Due Date Extension 1</a>",
+            "04/15/2026"
+        ],
+        [
+            "Alan",
+            "Armstrong",
+            "Armstrong, Alan (Senator)",
+            "<a href=\"/search/view/ptr/b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f/\" target=\"_blank\">Periodic Transaction Report for 09/17/2026</a>",
+            "09/17/2026"
+        ],
+        [
+            "Alan",
+            "Armstrong",
+            "Armstrong, Alan (Senator)",
+            "<a href=\"/search/view/ptr/fda235b3-bad7-4637-8fa1-053f354d929c/\" target=\"_blank\">Periodic Transaction Report for 07/21/2026</a>",
+            "07/21/2026"
+        ],
+        [
+            "Alan",
+            "Armstrong",
+            "Armstrong, Alan (Senator)",
+            "<a href=\"/search/view/annual/37264946-5291-4f15-aea8-c23453c027c3/\" target=\"_blank\">New Filer Report for 03/24/2026</a>",
+            "07/21/2026"
+        ],
+        [
+            "Tammy",
+            "Baldwin",
+            "Baldwin, Tammy (Senator)",
+            "<a href=\"/search/view/annual/c970b65b-fdc4-47b6-be36-5c5f736376f1/\" target=\"_blank\">Annual Report for CY 2015</a>",
+            "05/11/2016"
+        ]
+    ],
+    "result": "ok"
+}
