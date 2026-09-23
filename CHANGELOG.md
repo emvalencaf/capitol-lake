@@ -13,6 +13,7 @@ heading when `development` is released to `master`.
 - ADR 0010: FinOps decision — AWS Budget filtered by the `Project=capitol-lake` cost allocation tag, alert thresholds, and Terraform tagging scheme.
 - `src/capitol_lake/` skeleton with the pure-function-plus-handler stage convention, a stub stage/handler pair, and shared bronze/silver S3 key-layout helpers.
 - Local MinIO + Lambda Runtime Interface Emulator scaffold (`docker-compose.yml`, `docker/lambda.Dockerfile`) mirroring the intended S3 key layout, with conventions documented in `docs/local-dev.md`.
+- `src/capitol_lake/stages/bronze_write.py`: chamber-agnostic bronze contract — a pure, hash-gated idempotent write decision (no-op on matching sha256, versioned `<doc_id>.<sha256[:8]>.<ext>` key on a different hash, original key never overwritten) plus the sidecar `.meta.json` payload; `bronze_versioned_key`/`bronze_meta_key` key helpers.
 
 ### Changed
 

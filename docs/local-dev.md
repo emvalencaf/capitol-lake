@@ -37,6 +37,27 @@ differs. Built by `src/capitol_lake/keys.py`:
 - Bronze: `bronze/<chamber>/year=<year>/<doc_id>.<ext>`
 - Silver: `silver/<table>/chamber=<chamber>/year=<year>/part-<doc_id>.parquet`
 
+## Bronze contract: hash-gated idempotent writer
+
+`src/capitol_lake/stages/bronze_write.py` is the chamber-agnostic bronze
+contract shared by every collector. Given candidate bytes for a `doc_id` and
+the sha256 already on record for it (or `None` if it has never been
+stored), `bronze_write` decides — without touching S3 or the network — one
+of two outcomes:
+
+- **No-op**: the candidate's hash matches `existing_sha256`. Nothing is
+  written.
+- **Write**: first write, or the candidate's hash differs. First write uses
+  the original `bronze_key`; a differing hash instead produces a new
+  versioned key, `<doc_id>.<sha256[:8]>.<ext>`, and the original key is
+  never overwritten. Every write carries a sidecar `.meta.json` (`bronze_meta_key`)
+  with `source_url`, `fetched_at`, `sha256`, `chamber`, `doc_id`, `year`,
+  `ext`, `index_row`.
+
+The caller (a future collector stage) is responsible for reading the prior
+sha256 from the existing sidecar and performing the actual S3 write per the
+returned plan.
+
 ## Running MinIO locally
 
 ```bash
