@@ -59,6 +59,8 @@ Data engineering pipeline.
 ### Prerequisites
 
 * [`uv`](https://docs.astral.sh/uv/)
+* [Docker](https://docs.docker.com/get-docker/) and `docker-compose`, for the
+  local MinIO/Lambda scaffold
 
 ### Installation
 
@@ -71,10 +73,26 @@ Data engineering pipeline.
    ```bash
    scripts/setup.sh
    ```
+3. Install Python dependencies
+   ```bash
+   uv sync
+   ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Usage
+
+Run the test suite:
+
+```bash
+uv run pytest
+```
+
+Pipeline stages follow a pure-function-plus-handler convention and run
+locally against a MinIO stand-in for S3, with each stage's Lambda handler
+runnable through the Lambda Runtime Interface Emulator exactly as it will
+run in AWS. See [`docs/local-dev.md`](docs/local-dev.md) for the full
+conventions and how to bring up the local stack.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
