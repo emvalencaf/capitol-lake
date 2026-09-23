@@ -1,5 +1,6 @@
 import hashlib
 import json
+from pathlib import Path
 
 import pytest
 
@@ -13,6 +14,8 @@ from capitol_lake.stages.senate_collect import (
     route_filing_kind,
     senate_filing_url,
 )
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 # ---------------------------------------------------------------------------
 # route_filing_kind
@@ -33,9 +36,10 @@ def test_route_filing_kind_classifies_known_kinds(raw, kind):
     assert route_filing_kind(raw) == kind
 
 
-def test_route_filing_kind_raises_on_unknown_kind():
+@pytest.mark.parametrize("raw", ["annual", "extension-notice/regular"])
+def test_route_filing_kind_raises_on_non_ptr_report_kinds(raw):
     with pytest.raises(UnknownFilingKindError):
-        route_filing_kind("annual")
+        route_filing_kind(raw)
 
 
 # ---------------------------------------------------------------------------
@@ -51,45 +55,89 @@ def test_senate_filing_url_includes_filing_id_and_ptr_path():
 
 # ---------------------------------------------------------------------------
 # parse_senate_index
+#
+# `senate_search_sample.json` is a trimmed, real eFD `/search/report/data/`
+# response (captured 2026-09-23), not synthetic data: each row is
+# `[first, last, office, html_link, filed_date]`, `html_link` is an anchor
+# like `<a href="/search/view/ptr/{uuid}/">...</a>`, and real search results
+# mix report kinds (ptr, paper, annual, extension-notice/regular) and years
+# in one response.
 # ---------------------------------------------------------------------------
 
 
-def test_parse_senate_index_keeps_only_ptr_rows():
-    rows = [
-        {"filing_id": "uuid-1", "filing_type": "ptr"},
-        {"filing_id": "uuid-2", "filing_type": "paper"},
-        {"filing_id": "uuid-3", "filing_type": "ptr"},
+def _load_sample():
+    return json.loads((FIXTURES / "senate_search_sample.json").read_text())
+
+
+def test_parse_senate_index_keeps_only_ptr_rows_from_a_real_recorded_response():
+    entries = parse_senate_index(_load_sample())
+
+    assert [(e.filing_id, e.year, e.kind) for e in entries] == [
+        ("b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f", 2026, "ptr"),
+        ("fda235b3-bad7-4637-8fa1-053f354d929c", 2026, "ptr"),
     ]
 
-    entries = parse_senate_index(rows, 2024)
 
-    assert [(e.filing_id, e.kind, e.index_row) for e in entries] == [
-        ("uuid-1", "ptr", 0),
-        ("uuid-3", "ptr", 2),
+def test_parse_senate_index_preserves_row_position_as_index_row():
+    entries = parse_senate_index(_load_sample())
+
+    # The two ptr rows sit at positions 5 and 6 in the fixture's data array.
+    assert [e.index_row for e in entries] == [5, 6]
+
+
+def test_parse_senate_index_skips_paper_rows():
+    response = {
+        "data": [
+            [
+                "Jane",
+                "Doe",
+                "Senator",
+                '<a href="/search/view/paper/2701724B-A03B-4738-8E28-15D9FBBADEFE/">Annual</a>',
+                "05/15/2012",
+            ],
+        ]
+    }
+
+    assert parse_senate_index(response) == []
+
+
+def test_parse_senate_index_skips_rows_without_a_recognized_link():
+    response = {
+        "data": [
+            ["Jane", "Doe", "Senator", "no link here", "05/15/2012"],
+            ["", "", "", "", ""],
+        ]
+    }
+
+    assert parse_senate_index(response) == []
+
+
+def test_parse_senate_index_treats_amendment_as_a_separate_entry():
+    response = {
+        "data": [
+            [
+                "Jane",
+                "Doe",
+                "Senator",
+                '<a href="/search/view/ptr/11111111-1111-1111-1111-111111111111/">PTR</a>',
+                "01/02/2024",
+            ],
+            [
+                "Jane",
+                "Doe",
+                "Senator",
+                '<a href="/search/view/ptr/22222222-2222-2222-2222-222222222222/">PTR Amend</a>',
+                "01/03/2024",
+            ],
+        ]
+    }
+
+    entries = parse_senate_index(response)
+
+    assert [e.filing_id for e in entries] == [
+        "11111111-1111-1111-1111-111111111111",
+        "22222222-2222-2222-2222-222222222222",
     ]
-    assert all(e.year == 2024 for e in entries)
-
-
-def test_parse_senate_index_skips_unrecognized_filing_types():
-    rows = [
-        {"filing_id": "uuid-1", "filing_type": "annual"},
-        {"filing_id": "uuid-2", "filing_type": "ptr"},
-    ]
-
-    entries = parse_senate_index(rows, 2024)
-
-    assert [e.filing_id for e in entries] == ["uuid-2"]
-
-
-def test_parse_senate_index_skips_rows_without_filing_id():
-    rows = [
-        {"filing_id": "", "filing_type": "ptr"},
-        {"filing_id": "uuid-2", "filing_type": "ptr"},
-    ]
-
-    entries = parse_senate_index(rows, 2024)
-
-    assert [e.filing_id for e in entries] == ["uuid-2"]
 
 
 # ---------------------------------------------------------------------------
@@ -150,43 +198,83 @@ def _no_sleep_rate_limiter():
     return RateLimiter(min_interval=1.0, clock=lambda: 0.0, sleep=lambda _: None)
 
 
-def test_collect_senate_writes_new_ptr_filings_with_correct_keys_and_metadata():
-    filing_id = "3b1f6a2e-1111-2222-3333-444455556666"
-    rows = [{"filing_id": filing_id, "filing_type": "ptr"}]
-    filing_bytes = b"<html>fake senate ptr filing</html>"
-    url = senate_filing_url(filing_id)
+def test_collect_senate_writes_a_real_recorded_ptr_filing_byte_for_byte():
+    """Round-trips an actual fetched `/ptr/` page (not synthetic bytes) through bronze_write.
+
+    `senate_ptr_sample.html` is the real HTML `senate_filing_url` returned for
+    `b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f` (captured 2026-09-23, via a
+    headless-Chromium session that cleared the Akamai check — a plain HTTP
+    client does not, even reusing that session's cookies). This closes the
+    gap the House collector's tests don't have either: proof that a real
+    filing's bytes, not just a synthetic stand-in, survive the bronze write
+    unmodified.
+    """
+    response = _load_sample()
+    id_1 = "b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f"
+    real_bytes = (FIXTURES / "senate_ptr_sample.html").read_bytes()
     store = FakeStore()
 
     result = collect_senate(
-        2024,
-        rows,
-        fetch_filing=_fetch_filing_from({url: filing_bytes}),
+        response,
+        fetch_filing=_fetch_filing_from(
+            {
+                senate_filing_url(id_1): real_bytes,
+                senate_filing_url("fda235b3-bad7-4637-8fa1-053f354d929c"): b"<html>ptr two</html>",
+            }
+        ),
         read_existing_sha256=store.read_existing_sha256,
         write_bytes=store.write_bytes,
-        now=lambda: "2024-06-01T00:00:00Z",
+        now=lambda: "2026-09-23T00:00:00Z",
         rate_limiter=_no_sleep_rate_limiter(),
     )
 
-    bronze_key = f"bronze/senate/year=2024/{filing_id}.html"
-    meta_key = bronze_key + ".meta.json"
+    key = f"bronze/senate/year=2026/{id_1}.html"
+    assert key in result["written"]
+    assert store.objects[key] == real_bytes
 
-    assert result == {"year": 2024, "written": [bronze_key], "noop": []}
-    assert store.objects[bronze_key] == filing_bytes
-
-    meta = json.loads(store.objects[meta_key])
-    assert meta["doc_id"] == filing_id
+    meta = json.loads(store.objects[key + ".meta.json"])
+    assert meta["sha256"] == hashlib.sha256(real_bytes).hexdigest()
+    assert meta["doc_id"] == id_1
     assert meta["chamber"] == "senate"
-    assert meta["year"] == 2024
-    assert meta["source_url"] == url
     assert meta["kind"] == "ptr"
-    assert meta["sha256"] == hashlib.sha256(filing_bytes).hexdigest()
 
 
-def test_collect_senate_never_fetches_paper_filings():
-    rows = [
-        {"filing_id": "uuid-ptr", "filing_type": "ptr"},
-        {"filing_id": "uuid-paper", "filing_type": "paper"},
-    ]
+def test_collect_senate_writes_new_ptr_filings_with_correct_keys_and_metadata():
+    response = _load_sample()
+    id_1 = "b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f"
+    id_2 = "fda235b3-bad7-4637-8fa1-053f354d929c"
+    bodies = {
+        senate_filing_url(id_1): b"<html>ptr filing one</html>",
+        senate_filing_url(id_2): b"<html>ptr filing two</html>",
+    }
+    store = FakeStore()
+
+    result = collect_senate(
+        response,
+        fetch_filing=_fetch_filing_from(bodies),
+        read_existing_sha256=store.read_existing_sha256,
+        write_bytes=store.write_bytes,
+        now=lambda: "2026-09-23T00:00:00Z",
+        rate_limiter=_no_sleep_rate_limiter(),
+    )
+
+    key_1 = f"bronze/senate/year=2026/{id_1}.html"
+    key_2 = f"bronze/senate/year=2026/{id_2}.html"
+
+    assert result == {"years": [2026], "written": [key_1, key_2], "noop": []}
+    assert store.objects[key_1] == bodies[senate_filing_url(id_1)]
+
+    meta = json.loads(store.objects[key_1 + ".meta.json"])
+    assert meta["doc_id"] == id_1
+    assert meta["chamber"] == "senate"
+    assert meta["year"] == 2026
+    assert meta["source_url"] == senate_filing_url(id_1)
+    assert meta["kind"] == "ptr"
+    assert meta["sha256"] == hashlib.sha256(bodies[senate_filing_url(id_1)]).hexdigest()
+
+
+def test_collect_senate_never_fetches_non_ptr_filings():
+    response = _load_sample()
     fetched_urls = []
 
     def _fetch(url: str) -> bytes:
@@ -196,92 +284,67 @@ def test_collect_senate_never_fetches_paper_filings():
     store = FakeStore()
 
     collect_senate(
-        2024,
-        rows,
+        response,
         fetch_filing=_fetch,
         read_existing_sha256=store.read_existing_sha256,
         write_bytes=store.write_bytes,
-        now=lambda: "2024-06-01T00:00:00Z",
+        now=lambda: "2026-09-23T00:00:00Z",
         rate_limiter=_no_sleep_rate_limiter(),
     )
 
-    assert fetched_urls == [senate_filing_url("uuid-ptr")]
-
-
-def test_collect_senate_treats_amendment_uuid_as_a_new_filing_not_a_version():
-    original_id = "3b1f6a2e-1111-2222-3333-444455556666"
-    amendment_id = "9a8b7c6d-9999-8888-7777-666655554444"
-    rows = [
-        {"filing_id": original_id, "filing_type": "ptr"},
-        {"filing_id": amendment_id, "filing_type": "ptr"},
+    assert fetched_urls == [
+        senate_filing_url("b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f"),
+        senate_filing_url("fda235b3-bad7-4637-8fa1-053f354d929c"),
     ]
-    bodies = {
-        senate_filing_url(original_id): b"<html>original</html>",
-        senate_filing_url(amendment_id): b"<html>amendment</html>",
-    }
-    store = FakeStore()
-
-    result = collect_senate(
-        2024,
-        rows,
-        fetch_filing=_fetch_filing_from(bodies),
-        read_existing_sha256=store.read_existing_sha256,
-        write_bytes=store.write_bytes,
-        now=lambda: "2024-06-01T00:00:00Z",
-        rate_limiter=_no_sleep_rate_limiter(),
-    )
-
-    assert result["written"] == [
-        f"bronze/senate/year=2024/{original_id}.html",
-        f"bronze/senate/year=2024/{amendment_id}.html",
-    ]
-    assert result["noop"] == []
 
 
 def test_collect_senate_is_idempotent_on_unchanged_source():
-    filing_id = "3b1f6a2e-1111-2222-3333-444455556666"
-    rows = [{"filing_id": filing_id, "filing_type": "ptr"}]
-    filing_bytes = b"<html>fake senate ptr filing</html>"
-    url = senate_filing_url(filing_id)
+    response = _load_sample()
+    id_1 = "b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f"
+    id_2 = "fda235b3-bad7-4637-8fa1-053f354d929c"
+    bodies = {
+        senate_filing_url(id_1): b"<html>ptr filing one</html>",
+        senate_filing_url(id_2): b"<html>ptr filing two</html>",
+    }
     store = FakeStore()
 
     kwargs = dict(
-        fetch_filing=_fetch_filing_from({url: filing_bytes}),
+        fetch_filing=_fetch_filing_from(bodies),
         read_existing_sha256=store.read_existing_sha256,
         write_bytes=store.write_bytes,
-        now=lambda: "2024-06-01T00:00:00Z",
+        now=lambda: "2026-09-23T00:00:00Z",
     )
 
-    collect_senate(2024, rows, rate_limiter=_no_sleep_rate_limiter(), **kwargs)
+    collect_senate(response, rate_limiter=_no_sleep_rate_limiter(), **kwargs)
     objects_after_first_run = dict(store.objects)
 
-    result = collect_senate(2024, rows, rate_limiter=_no_sleep_rate_limiter(), **kwargs)
+    result = collect_senate(response, rate_limiter=_no_sleep_rate_limiter(), **kwargs)
 
     assert result["written"] == []
-    assert result["noop"] == [f"bronze/senate/year=2024/{filing_id}.html"]
+    assert sorted(result["noop"]) == sorted(
+        [f"bronze/senate/year=2026/{id_1}.html", f"bronze/senate/year=2026/{id_2}.html"]
+    )
     assert store.objects == objects_after_first_run
 
 
 def test_collect_senate_rate_limits_between_filing_fetches():
-    rows = [
-        {"filing_id": "uuid-1", "filing_type": "ptr"},
-        {"filing_id": "uuid-2", "filing_type": "ptr"},
-    ]
+    response = _load_sample()
+    id_1 = "b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f"
+    id_2 = "fda235b3-bad7-4637-8fa1-053f354d929c"
     bodies = {
-        senate_filing_url("uuid-1"): b"<html>one</html>",
-        senate_filing_url("uuid-2"): b"<html>two</html>",
+        senate_filing_url(id_1): b"one",
+        senate_filing_url(id_2): b"two",
     }
     store = FakeStore()
     sleeps = []
     limiter = RateLimiter(min_interval=1.0, clock=lambda: 100.0, sleep=sleeps.append)
 
     collect_senate(
-        2024,
-        rows,
+        response,
         fetch_filing=_fetch_filing_from(bodies),
         read_existing_sha256=store.read_existing_sha256,
         write_bytes=store.write_bytes,
-        now=lambda: "2024-06-01T00:00:00Z",
+        now=lambda: "2026-09-23T00:00:00Z",
         rate_limiter=limiter,
     )
 

@@ -76,24 +76,36 @@ wires it to real `urllib` fetches and a real `boto3` S3 client.
 
 `src/capitol_lake/stages/senate_collect.py` is the second caller of the
 bronze contract, writing `bronze/senate/year=<year>/<filing_id>.html`. Unlike
-House, it is not scheduled: the Senate eFD search UI is Akamai bot/fingerprint
--protected (#17, #23), so a scripted index fetch from this collector isn't
-reliable, and per #18 the stage stays manual — a human runs the eFD search
-locally, exports the result rows, and calls `collect_senate(year, rows, ...)`
-(or invokes `senate_collect_handler` with `event["rows"]` set to that export)
-directly, rather than this stage discovering the index itself.
-`route_filing_kind`/`parse_senate_index` route and filter those rows to
-`/ptr/` (electronic, clean HTML) entries with no network call — `/paper/`
-(scanned-GIF, pre-electronic-mandate) rows are skipped and never fetched,
-out of scope per the map (#30). `collect_senate` then rate-limits
-(`RateLimiter`, ~1 request/second by default) and fetches each `/ptr/`
-filing's HTML by its Senate eFD UUID, running it through `bronze_write`
-exactly as `collect_house` does; a filing's UUID and an amendment's own,
-separate UUID are used as `doc_id` unchanged, so the existing idempotency
-contract applies without modification. Network and storage access are fully
-injected so `collect_senate` itself is tested against fakes with no live
-network call and no MinIO; only `handlers/senate_collect_handler.py` wires
-it to real `urllib` fetches and a real `boto3` S3 client.
+House, it is not scheduled: the Senate eFD search UI is Akamai
+bot/fingerprint-protected (#17, #23) — confirmed live (2026-09-23) even on
+individual `/ptr/` filing pages, and even reusing an authenticated session's
+cookies with a plain HTTP client (`requests`); only an actual browser engine
+(headless Chromium via Selenium) clears the check. Per #18 the stage stays
+manual — a human (or a local headless-browser step, per #23's method) runs
+the eFD search, captures the JSON body its own DataTables endpoint
+(`POST /search/report/data/`) returns, and calls `collect_senate(response,
+...)` (or invokes `senate_collect_handler` with `event["response"]` set to
+that capture) directly, rather than this stage discovering the index itself.
+`route_filing_kind`/`parse_senate_index` route and filter that response's
+rows — `[first, last, office, html_link, filed_date]`, confirmed against a
+real recorded response (`tests/fixtures/senate_search_sample.json`) and a
+real fetched `/ptr/` filing page (`tests/fixtures/senate_ptr_sample.html`,
+round-tripped byte-for-byte through `bronze_write` in a test) — to
+`/ptr/` (electronic, clean HTML) entries with no network call, deriving each
+entry's year from its `filed_date` column since the response isn't scoped to
+one year. `/paper/` (scanned-GIF, pre-electronic-mandate) and every other
+report kind the search surfaces (`annual`, `extension-notice/regular`, ...)
+are skipped and never fetched, out of scope per the map (#30). `collect_senate`
+then rate-limits (`RateLimiter`, ~1 request/second by default) and fetches
+each `/ptr/` filing's HTML by its Senate eFD UUID, running it through
+`bronze_write` exactly as `collect_house` does; a filing's UUID and an
+amendment's own, separate UUID are used as `doc_id` unchanged, so the
+existing idempotency contract applies without modification. Network and
+storage access are fully injected so `collect_senate` itself is tested
+against fakes with no live network call and no MinIO; only
+`handlers/senate_collect_handler.py` wires it to real `urllib` fetches and a
+real `boto3` S3 client — which only succeeds where the Akamai check passes
+(a plain `urllib` request does not; see above).
 
 ## Running MinIO locally
 
