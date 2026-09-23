@@ -72,6 +72,29 @@ plain callables, so `collect_house` itself is tested against fakes with no
 live network call and no MinIO; only `handlers/house_collect_handler.py`
 wires it to real `urllib` fetches and a real `boto3` S3 client.
 
+## Senate collector
+
+`src/capitol_lake/stages/senate_collect.py` is the second caller of the
+bronze contract, writing `bronze/senate/year=<year>/<filing_id>.html`. Unlike
+House, it is not scheduled: the Senate eFD search UI is Akamai bot/fingerprint
+-protected (#17, #23), so a scripted index fetch from this collector isn't
+reliable, and per #18 the stage stays manual — a human runs the eFD search
+locally, exports the result rows, and calls `collect_senate(year, rows, ...)`
+(or invokes `senate_collect_handler` with `event["rows"]` set to that export)
+directly, rather than this stage discovering the index itself.
+`route_filing_kind`/`parse_senate_index` route and filter those rows to
+`/ptr/` (electronic, clean HTML) entries with no network call — `/paper/`
+(scanned-GIF, pre-electronic-mandate) rows are skipped and never fetched,
+out of scope per the map (#30). `collect_senate` then rate-limits
+(`RateLimiter`, ~1 request/second by default) and fetches each `/ptr/`
+filing's HTML by its Senate eFD UUID, running it through `bronze_write`
+exactly as `collect_house` does; a filing's UUID and an amendment's own,
+separate UUID are used as `doc_id` unchanged, so the existing idempotency
+contract applies without modification. Network and storage access are fully
+injected so `collect_senate` itself is tested against fakes with no live
+network call and no MinIO; only `handlers/senate_collect_handler.py` wires
+it to real `urllib` fetches and a real `boto3` S3 client.
+
 ## Running MinIO locally
 
 ```bash
