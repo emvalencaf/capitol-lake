@@ -9,6 +9,7 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- `src/capitol_lake/stages/house_collect.py`: House collector — `route_doc_id` classifies a doc id as digital (`20…`) or scanned (`82…`/`91…`) with no network call, `parse_house_index` parses the annual index ZIP into routed entries, and `collect_house` orchestrates the rate-limited (~1 req/s) fetch-and-`bronze_write` loop against fully injected network/S3 callables; `handlers/house_collect_handler.py` wires it to real `urllib`/`boto3` clients, with a `docker/house_collect.Dockerfile` and `house-collect-stage` compose service.
 - `src/capitol_lake/schema.py`: silver-layer `Filing` and `Transaction` models — canonical `Owner`/`TransactionType` enums with raw-text fields, `(min, max)` `ValueRange`, an invariant-enforced `disclosure_lag`, a `ticker` slot for future resolution, and row-level `confidence`/`Provenance`.
 - ADR 0010: FinOps decision — AWS Budget filtered by the `Project=capitol-lake` cost allocation tag, alert thresholds, and Terraform tagging scheme.
 - `src/capitol_lake/` skeleton with the pure-function-plus-handler stage convention, a stub stage/handler pair, and shared bronze/silver S3 key-layout helpers.

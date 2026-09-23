@@ -47,5 +47,23 @@ services:
       minio-init:
         condition: service_completed_successfully
 
+  # House collector: fetches the annual index and routes/stores PTR
+  # filings into bronze. See docs/local-dev.md.
+  house-collect-stage:
+    build:
+      context: .
+      dockerfile: docker/house_collect.Dockerfile
+    ports:
+      - "9101:8080"
+    environment:
+      AWS_ENDPOINT_URL_S3: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_REGION: us-east-1
+      BRONZE_BUCKET: bronze
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
 volumes:
   minio-data:
