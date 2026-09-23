@@ -7,6 +7,10 @@ heading when `development` is released to `master`.
 
 ## [Unreleased]
 
+### Added
+
+- ADR 0010: FinOps decision — AWS Budget filtered by the `Project=capitol-lake` cost allocation tag, alert thresholds, and Terraform tagging scheme.
+
 ### Changed
 
 - Project configured from the harness template: name, code standards, agent skills docs.
