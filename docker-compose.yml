@@ -65,5 +65,24 @@ services:
       minio-init:
         condition: service_completed_successfully
 
+  # Senate collector: fetches `/ptr/` filings by id and stores them into
+  # bronze. Not scheduled (#18); invoked manually with a locally exported
+  # search-result payload. See docs/local-dev.md.
+  senate-collect-stage:
+    build:
+      context: .
+      dockerfile: docker/senate_collect.Dockerfile
+    ports:
+      - "9102:8080"
+    environment:
+      AWS_ENDPOINT_URL_S3: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_REGION: us-east-1
+      BRONZE_BUCKET: bronze
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
 volumes:
   minio-data:
