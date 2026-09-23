@@ -58,6 +58,20 @@ The caller (a future collector stage) is responsible for reading the prior
 sha256 from the existing sidecar and performing the actual S3 write per the
 returned plan.
 
+## House collector
+
+`src/capitol_lake/stages/house_collect.py` is the first caller of the bronze
+contract. `route_doc_id` classifies a House doc id as `"digital"` (`20…`
+prefix) or `"scanned"` (`82…`/`91…` prefix) with no network call, and
+`parse_house_index` parses the annual index ZIP's XML into routed entries,
+also with no network call — both are unit-tested directly. `collect_house`
+orchestrates the full run: fetch the index, then for each entry rate-limit
+(`RateLimiter`, ~1 request/second by default) before fetching the filing and
+running it through `bronze_write`. All network and S3 access is injected as
+plain callables, so `collect_house` itself is tested against fakes with no
+live network call and no MinIO; only `handlers/house_collect_handler.py`
+wires it to real `urllib` fetches and a real `boto3` S3 client.
+
 ## Running MinIO locally
 
 ```bash
