@@ -23,7 +23,8 @@ Workflow:
 1. `git switch development && git pull`
 2. `git switch -c <tag>/<short-description>` (e.g. `feat/query-skill`)
 3. Commit following the convention below.
-4. Open a PR **into `development`**. Delete the branch after merge.
+4. Open a PR **into `development`**. Keep the branch after merge (do not
+   delete it) so work stays traceable.
 5. To release, open a PR from `development` **into `master`** and update
    [CHANGELOG.md](CHANGELOG.md).
 
@@ -101,3 +102,5 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 - Title follows the commit title format; description explains why and what.
 - Follow [CODE_STANDARDS.md](CODE_STANDARDS.md).
 - Add an entry to [CHANGELOG.md](CHANGELOG.md) under `Unreleased`.
+- Do not delete the source branch when merging (no `--delete-branch`); branches
+  are kept for traceability.
