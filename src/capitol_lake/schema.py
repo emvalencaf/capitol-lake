@@ -11,6 +11,7 @@ deferred to the gold layer.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import InitVar, dataclass, field
 from datetime import date
 from enum import Enum
@@ -78,15 +79,20 @@ class Provenance:
 
 @dataclass(frozen=True)
 class ValueRange:
-    """The `(min, max)` bracket a Transaction's reported value falls in."""
+    """The `(min, max)` bracket a Transaction's reported value falls in.
+
+    `max` is null for an open-ended bracket (`Over $50,000,000`): there is
+    no upper bound, and a null stays valid JSON and never poisons a sum the
+    way an infinity would.
+    """
 
     min: float
-    max: float
+    max: float | None
 
     def __post_init__(self) -> None:
         if self.min < 0:
             raise ValueError(f"min must be >= 0, got {self.min!r}")
-        if self.max < self.min:
+        if self.max is not None and self.max < self.min:
             raise ValueError(f"max ({self.max!r}) must be >= min ({self.min!r})")
 
 
@@ -116,6 +122,16 @@ class Transaction:
     stored on the row, since filing-level metadata lives on `Filing` and
     must not repeat per transaction line. Ticker resolution (attempted only
     for stock/ETF `asset_type`) lands in `ticker`, left null otherwise.
+
+    `notification_date`, `filing_status`, `sub_owner` (the form's
+    "Subholding Of" line) and `description` are optional per-line fields an
+    extractor may or may not find. Each is null when not found, never
+    guessed. `field_confidence` records how sure the extractor is of each
+    such field: a null at full confidence means the source has no such
+    line; a low one means it couldn't be read, which is what a fallback
+    stage may try to recover. `confidence` is the lowest of these.
+    `notification_date` is kept exactly as printed, even when it precedes
+    `transaction_date` (a known source-side bug).
     """
 
     doc_id: str
@@ -132,6 +148,11 @@ class Transaction:
     confidence: float
     provenance: Provenance
     ticker: str | None = None
+    notification_date: date | None = None
+    filing_status: str | None = None
+    sub_owner: str | None = None
+    description: str | None = None
+    field_confidence: Mapping[str, float] = field(default_factory=dict, hash=False)
     disclosure_lag: int = field(init=False)
 
     def __post_init__(self, filing_date: date) -> None:
@@ -140,4 +161,6 @@ class Transaction:
             raise ValueError(f"line_no must be >= 1, got {self.line_no!r}")
         _check_not_empty("asset_description", self.asset_description)
         _check_confidence(self.confidence)
+        for value in self.field_confidence.values():
+            _check_confidence(value)
         object.__setattr__(self, "disclosure_lag", (filing_date - self.transaction_date).days)
