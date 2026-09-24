@@ -66,6 +66,7 @@ from capitol_lake.schema import (
     Provenance,
     Transaction,
 )
+from capitol_lake.stages import _house_form
 
 EXTRACTOR_NAME = "house-scanned-pdf"
 
@@ -122,21 +123,6 @@ _MONTHS = {
     "OCT": 10,
     "NOV": 11,
     "DEC": 12,
-}
-
-_OWNER_RE = re.compile(r"^(?P<owner>SP|JT|DC)\s+")
-_ASSET_TYPE_CODE_RE = re.compile(r"\[(?P<code>[A-Z0-9]{2})\]\s*$", re.IGNORECASE)
-_PRINTED_SYMBOL_RE = re.compile(r"\(([A-Za-z][A-Za-z0-9.\-/]{0,9})\)\s*\[[A-Za-z0-9]{2}\]\s*$")
-_OWNERS = {"": Owner.SELF, "SP": Owner.SPOUSE, "JT": Owner.JOINT, "DC": Owner.DEPENDENT_CHILD}
-_ASSET_TYPES = {
-    "ST": AssetType.STOCK,
-    "EF": AssetType.ETF,
-    "MF": AssetType.MUTUAL_FUND,
-    "GS": AssetType.BOND,
-    "CS": AssetType.BOND,
-    "OP": AssetType.OPTION,
-    "CT": AssetType.CRYPTOCURRENCY,
-    "RP": AssetType.REAL_ESTATE,
 }
 
 # A recovered "row" this short, this non-alphabetic, or built only from
@@ -325,22 +311,22 @@ def _parse_date(raw: str) -> date | None:
 
 def _parse_transaction(row: dict, filing: Filing, line_no: int) -> Transaction | None:
     text = row["text"]
-    owner_match = _OWNER_RE.match(text)
+    owner_match = _house_form.OWNER_RE.match(text)
     owner_raw = owner_match.group("owner") if owner_match else ""
     description = text[owner_match.end() :].strip() if owner_match else text
     if not description:
         return None
 
-    code_match = _ASSET_TYPE_CODE_RE.search(description)
+    code_match = _house_form.ASSET_TYPE_CODE_RE.search(description)
     if code_match is None:
         asset_type, asset_type_confidence = AssetType.OTHER, LOW_CONFIDENCE
         ticker = None
     else:
-        asset_type = _ASSET_TYPES.get(code_match.group("code").upper(), AssetType.OTHER)
+        asset_type = _house_form.ASSET_TYPES.get(code_match.group("code").upper(), AssetType.OTHER)
         asset_type_confidence = FULL_CONFIDENCE
         ticker = None
         if asset_type in (AssetType.STOCK, AssetType.ETF):
-            symbol_match = _PRINTED_SYMBOL_RE.search(description)
+            symbol_match = _house_form.PRINTED_SYMBOL_RE.search(description)
             if symbol_match is not None:
                 ticker = symbol_match.group(1).upper()
 
@@ -365,7 +351,7 @@ def _parse_transaction(row: dict, filing: Filing, line_no: int) -> Transaction |
     return Transaction(
         doc_id=filing.doc_id,
         line_no=line_no,
-        owner=_OWNERS.get(owner_raw, Owner.SELF),
+        owner=_house_form.OWNERS.get(owner_raw, Owner.SELF),
         owner_raw=owner_raw,
         transaction_type=None,
         transaction_type_raw="",

@@ -51,12 +51,12 @@ from capitol_lake.schema import (
     AssetType,
     Chamber,
     Filing,
-    Owner,
     Provenance,
     Transaction,
     TransactionType,
     ValueRange,
 )
+from capitol_lake.stages import _house_form
 
 EXTRACTOR_NAME = "house-digital-pdf"
 
@@ -96,13 +96,6 @@ _ANCHOR_RE = re.compile(
     r"(?P<amount>\S.*)$",
     re.IGNORECASE,
 )
-_OWNER_RE = re.compile(r"^(?P<owner>SP|JT|DC)\s+")
-_ASSET_TYPE_CODE_RE = re.compile(r"\[(?P<code>[A-Z0-9]{2})\]$", re.IGNORECASE)
-# The parenthesized token right before the asset-type code, e.g. "(AMGN)" in
-# "Amgen Inc. - Common Stock (AMGN) [ST]". Only meaningful for stock/ETF
-# lines: for every other asset type this same shape holds a CUSIP or other
-# identifier, never a ticker.
-_PRINTED_SYMBOL_RE = re.compile(r"\(([A-Za-z][A-Za-z0-9.\-/]{0,9})\)\s*\[[A-Za-z0-9]{2}\]$")
 _NAME_RE = re.compile(r"^Name:\s*(?P<name>.+)$", re.MULTILINE | re.IGNORECASE)
 _SIGNED_RE = re.compile(r"Digitally Signed:\s*.+?,\s*(?P<date>\d{2}/\d{2}/\d{4})")
 
@@ -112,24 +105,11 @@ _AMOUNT_TAIL_RE = re.compile(r"^(?P<asset>.*?)\s*(?P<max>\$[\d,]+)$")
 _RANGE_RE = re.compile(r"^\$(?P<min>[\d,]+)\s*-\s*\$(?P<max>[\d,]+)$")
 _OVER_RE = re.compile(r"Over \$(?P<min>[\d,]+)$")
 
-_OWNERS = {"": Owner.SELF, "SP": Owner.SPOUSE, "JT": Owner.JOINT, "DC": Owner.DEPENDENT_CHILD}
 _TRANSACTION_TYPES = {
     "P": TransactionType.PURCHASE,
     "S": TransactionType.SALE_FULL,
     "S (PARTIAL)": TransactionType.SALE_PARTIAL,
     "E": TransactionType.EXCHANGE,
-}
-# House asset-type codes (fd.house.gov/reference/asset-type-codes.aspx) the
-# silver enum distinguishes; every other code is `OTHER`.
-_ASSET_TYPES = {
-    "ST": AssetType.STOCK,
-    "EF": AssetType.ETF,
-    "MF": AssetType.MUTUAL_FUND,
-    "GS": AssetType.BOND,
-    "CS": AssetType.BOND,
-    "OP": AssetType.OPTION,
-    "CT": AssetType.CRYPTOCURRENCY,
-    "RP": AssetType.REAL_ESTATE,
 }
 
 
@@ -267,16 +247,16 @@ def _asset_cell(asset_lines: list[str]) -> _AssetCell:
     null for the ticker-resolution cascade (#39) to fill by asset name.
     """
     asset_text = " ".join(" ".join(asset_lines).split())
-    owner_match = _OWNER_RE.match(asset_text)
+    owner_match = _house_form.OWNER_RE.match(asset_text)
     owner_raw = owner_match.group("owner") if owner_match else ""
     description = asset_text[owner_match.end() :] if owner_match else asset_text
-    code_match = _ASSET_TYPE_CODE_RE.search(description)
+    code_match = _house_form.ASSET_TYPE_CODE_RE.search(description)
     if code_match is None:
         return _AssetCell(owner_raw, description, AssetType.OTHER, LOW_CONFIDENCE, None)
-    asset_type = _ASSET_TYPES.get(code_match.group("code").upper(), AssetType.OTHER)
+    asset_type = _house_form.ASSET_TYPES.get(code_match.group("code").upper(), AssetType.OTHER)
     ticker = None
     if asset_type in (AssetType.STOCK, AssetType.ETF):
-        symbol_match = _PRINTED_SYMBOL_RE.search(description)
+        symbol_match = _house_form.PRINTED_SYMBOL_RE.search(description)
         if symbol_match is not None:
             ticker = symbol_match.group(1).upper()
     return _AssetCell(owner_raw, description, asset_type, FULL_CONFIDENCE, ticker)
@@ -347,7 +327,7 @@ def _parse_row(row: list[str], filing: Filing, line_no: int) -> Transaction:
     return Transaction(
         doc_id=filing.doc_id,
         line_no=line_no,
-        owner=_OWNERS[asset.owner_raw],
+        owner=_house_form.OWNERS[asset.owner_raw],
         owner_raw=asset.owner_raw,
         transaction_type=_TRANSACTION_TYPES[type_raw.upper()],
         transaction_type_raw=type_raw,
