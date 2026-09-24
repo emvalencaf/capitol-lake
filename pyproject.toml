@@ -4,7 +4,10 @@ description = "Data engineering pipeline."
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
+    "numpy>=2.4.6",
     "pypdf>=6.19.0",
+    "pypdfium2>=5.13.0",
+    "pytesseract>=0.3.13",
 ]
 
 [build-system]
