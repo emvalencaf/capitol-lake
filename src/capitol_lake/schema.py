@@ -11,6 +11,7 @@ deferred to the gold layer.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import InitVar, dataclass, field
 from datetime import date
 from enum import Enum
@@ -116,6 +117,14 @@ class Transaction:
     stored on the row, since filing-level metadata lives on `Filing` and
     must not repeat per transaction line. Ticker resolution (attempted only
     for stock/ETF `asset_type`) lands in `ticker`, left null otherwise.
+
+    `notification_date`, `filing_status`, `sub_owner` (the form's
+    "Subholding Of" line) and `description` are optional per-line fields an
+    extractor may or may not find. Each is null when not found, never
+    guessed, and `field_confidence` records how sure the extractor is of
+    each such field, so a null reads as "not found" rather than "unknown".
+    `notification_date` is kept exactly as printed, even when it precedes
+    `transaction_date` (a known source-side bug).
     """
 
     doc_id: str
@@ -132,6 +141,11 @@ class Transaction:
     confidence: float
     provenance: Provenance
     ticker: str | None = None
+    notification_date: date | None = None
+    filing_status: str | None = None
+    sub_owner: str | None = None
+    description: str | None = None
+    field_confidence: Mapping[str, float] = field(default_factory=dict)
     disclosure_lag: int = field(init=False)
 
     def __post_init__(self, filing_date: date) -> None:
@@ -140,4 +154,6 @@ class Transaction:
             raise ValueError(f"line_no must be >= 1, got {self.line_no!r}")
         _check_not_empty("asset_description", self.asset_description)
         _check_confidence(self.confidence)
+        for value in self.field_confidence.values():
+            _check_confidence(value)
         object.__setattr__(self, "disclosure_lag", (filing_date - self.transaction_date).days)
