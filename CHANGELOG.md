@@ -21,6 +21,7 @@ heading when `development` is released to `master`.
 
 ### Changed
 
+- `src/capitol_lake/stages/_house_form.py`: House owner-code and asset-type/ticker regexes and lookup tables (`OWNER_RE`, `OWNERS`, `ASSET_TYPE_CODE_RE`, `ASSET_TYPES`, `PRINTED_SYMBOL_RE`), shared by `digital_extract.py` and `scanned_extract.py` instead of duplicated between them, with no behavior change.
 - `src/capitol_lake/schema.py`: `Transaction.transaction_type` and `Transaction.value_range` are now nullable — both are hand/typed checkbox grids on a scanned PTR, unreadable from full-page OCR for the same reason ADR 0002 already declined zonal OCR for `transaction_type` (see its #37 addendum); a digital filing's typed text still yields both, so this is additive there.
 - `src/capitol_lake/schema.py`: `Transaction` gains optional `notification_date`, `filing_status`, `sub_owner` (the form's `Subholding Of:`) and `description` fields, plus a per-field `field_confidence` map (excluded from the hash): a null at full confidence means the source has no such line, a low one that it couldn't be read. `ValueRange.max` is nullable, null for an open-ended `Over $X` bracket, instead of an infinity that breaks JSON and sums.
 - Project configured from the harness template: name, code standards, agent skills docs.
