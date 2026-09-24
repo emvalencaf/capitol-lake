@@ -107,6 +107,24 @@ against fakes with no live network call and no MinIO; only
 real `boto3` S3 client — which only succeeds where the Akamai check passes
 (a plain `urllib` request does not; see above).
 
+## Extract stage
+
+`src/capitol_lake/stages/extract.py` is the third caller of the bronze
+contract's counterpart on the silver side. `extract_house_filing` takes a
+bronze PDF's bytes plus its `bronze_key`, parses `chamber`/`year`/`doc_id`
+back out of that key, routes to `digital_extract.extract_digital` or
+`scanned_extract.extract_scanned` via `house_collect.route_doc_id` (no
+manual classification), and serializes the resulting `Filing` and
+`Transaction` rows into two Hive-partitioned Parquet part files — one per
+silver table (`filings`, `transactions`), one part per `doc_id`
+(`silver_key`, ADR 0008). Every transaction row extracted is kept regardless
+of `asset_type`, with `asset_type` and the original `asset_description`
+always present; this stage only routes and serializes, it never filters a
+row out. Like every other stage here, the pure function never touches S3 —
+it returns each part file's key and bytes, and
+`handlers/extract_handler.py` (real `boto3` client) reads the bronze PDF and
+writes both silver part files.
+
 ## Running MinIO locally
 
 ```bash
