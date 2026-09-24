@@ -7,11 +7,14 @@ actually queryable (round-tripped with pyarrow) rather than just checking
 they're non-empty.
 """
 
+import dataclasses
 from pathlib import Path
 
 import pyarrow.parquet as pq
 import pytest
 
+from capitol_lake.schema import AssetType
+from capitol_lake.stages import extract as extract_module
 from capitol_lake.stages.extract import (
     DocIdMismatchError,
     UnrecognizedBronzeKeyError,
@@ -113,3 +116,66 @@ def test_doc_id_disagreeing_with_the_bronze_key_is_never_silently_written():
 
     with pytest.raises(DocIdMismatchError):
         extract_house_filing(pdf_bytes, bronze_key="bronze/house/year=2025/20099999.pdf")
+
+
+def test_resolve_ticker_fills_only_still_null_stock_and_etf_rows():
+    # 20030646 has both a bond (CUSIP, never a ticker candidate) and stock
+    # rows whose printed symbol already fills `ticker` (see
+    # test_digital_extract.py's printed-symbol tests) - resolve_ticker must
+    # never be asked about either of those, only a still-null stock/ETF row.
+    pdf_bytes = (FIXTURES / "house_digital_20030646.pdf").read_bytes()
+    calls: list[tuple[str, AssetType]] = []
+
+    def _resolve_ticker(asset_description: str, asset_type: AssetType) -> str | None:
+        calls.append((asset_description, asset_type))
+        return None
+
+    extract_house_filing(
+        pdf_bytes,
+        bronze_key="bronze/house/year=2025/20030646.pdf",
+        resolve_ticker=_resolve_ticker,
+    )
+
+    assert calls == []
+
+
+def test_resolve_ticker_result_lands_on_a_still_null_stock_row(monkeypatch):
+    # No sampled fixture has a stock/ETF line with no printed symbol, so the
+    # digital extractor's own output is faked here to exercise the one case
+    # resolve_ticker exists for: a still-null stock/ETF ticker.
+    pdf_bytes = (FIXTURES / "house_digital_20030646.pdf").read_bytes()
+    extraction = extract_module.extract_digital(
+        pdf_bytes, bronze_key="bronze/house/year=2025/20030646.pdf"
+    )
+    unresolved = dataclasses.replace(
+        extraction.transactions[0],
+        ticker=None,
+        asset_type=AssetType.STOCK,
+        filing_date=extraction.filing.filing_date,
+    )
+    faked = dataclasses.replace(extraction, transactions=[unresolved])
+    monkeypatch.setitem(extract_module._EXTRACTORS, "digital", lambda *a, **k: faked)
+
+    def _resolve_ticker(asset_description: str, asset_type: AssetType) -> str | None:
+        assert asset_type is AssetType.STOCK
+        return "RESOLVED"
+
+    result = extract_house_filing(
+        pdf_bytes,
+        bronze_key="bronze/house/year=2025/20030646.pdf",
+        resolve_ticker=_resolve_ticker,
+    )
+
+    table = _read_parquet(result["transactions"]["bytes"])
+    assert table.to_pylist()[0]["ticker"] == "RESOLVED"
+
+
+def test_no_resolve_ticker_argument_performs_no_resolution():
+    pdf_bytes = (FIXTURES / "house_digital_20030646.pdf").read_bytes()
+
+    result = extract_house_filing(pdf_bytes, bronze_key="bronze/house/year=2025/20030646.pdf")
+
+    table = _read_parquet(result["transactions"]["bytes"])
+    # Same rows as every other test above that omits resolve_ticker: nothing
+    # about the fixture's own tickers changes when no cascade is wired in.
+    assert table.num_rows == 2
