@@ -98,6 +98,11 @@ _ANCHOR_RE = re.compile(
 )
 _OWNER_RE = re.compile(r"^(?P<owner>SP|JT|DC)\s+")
 _ASSET_TYPE_CODE_RE = re.compile(r"\[(?P<code>[A-Z0-9]{2})\]$", re.IGNORECASE)
+# The parenthesized token right before the asset-type code, e.g. "(AMGN)" in
+# "Amgen Inc. - Common Stock (AMGN) [ST]". Only meaningful for stock/ETF
+# lines: for every other asset type this same shape holds a CUSIP or other
+# identifier, never a ticker.
+_PRINTED_SYMBOL_RE = re.compile(r"\(([A-Za-z][A-Za-z0-9.\-/]{0,9})\)\s*\[[A-Za-z0-9]{2}\]$")
 _NAME_RE = re.compile(r"^Name:\s*(?P<name>.+)$", re.MULTILINE | re.IGNORECASE)
 _SIGNED_RE = re.compile(r"Digitally Signed:\s*.+?,\s*(?P<date>\d{2}/\d{2}/\d{4})")
 
@@ -249,19 +254,32 @@ class _AssetCell:
     description: str
     asset_type: AssetType
     asset_type_confidence: float
+    ticker: str | None
 
 
 def _asset_cell(asset_lines: list[str]) -> _AssetCell:
-    """Split an asset cell's lines into its owner code, description and asset type."""
+    """Split an asset cell's lines into its owner code, description, asset type and ticker.
+
+    `ticker` is the filer's own printed symbol, kept only for stock/ETF
+    lines: the same parenthesized shape holds a CUSIP or other identifier
+    for every other asset type. It is never resolved or guessed here — a
+    filing with no parenthesized symbol, or a non-stock/ETF asset, leaves it
+    null for the ticker-resolution cascade (#39) to fill by asset name.
+    """
     asset_text = " ".join(" ".join(asset_lines).split())
     owner_match = _OWNER_RE.match(asset_text)
     owner_raw = owner_match.group("owner") if owner_match else ""
     description = asset_text[owner_match.end() :] if owner_match else asset_text
     code_match = _ASSET_TYPE_CODE_RE.search(description)
     if code_match is None:
-        return _AssetCell(owner_raw, description, AssetType.OTHER, LOW_CONFIDENCE)
+        return _AssetCell(owner_raw, description, AssetType.OTHER, LOW_CONFIDENCE, None)
     asset_type = _ASSET_TYPES.get(code_match.group("code").upper(), AssetType.OTHER)
-    return _AssetCell(owner_raw, description, asset_type, FULL_CONFIDENCE)
+    ticker = None
+    if asset_type in (AssetType.STOCK, AssetType.ETF):
+        symbol_match = _PRINTED_SYMBOL_RE.search(description)
+        if symbol_match is not None:
+            ticker = symbol_match.group(1).upper()
+    return _AssetCell(owner_raw, description, asset_type, FULL_CONFIDENCE, ticker)
 
 
 def _parse_filing(text: str, bronze_key: str) -> Filing:
@@ -340,6 +358,7 @@ def _parse_row(row: list[str], filing: Filing, line_no: int) -> Transaction:
         value_range=value_range,
         confidence=min(field_confidence.values()),
         provenance=filing.provenance,
+        ticker=asset.ticker,
         notification_date=_parse_date(anchor.group("notification_date")),
         filing_status=values.get("filing_status"),
         sub_owner=values.get("sub_owner"),

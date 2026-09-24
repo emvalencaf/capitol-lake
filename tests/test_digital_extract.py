@@ -283,3 +283,29 @@ def test_2021_form_template_with_scrambled_label_case_and_checkbox_glyphs():
     assert transactions[4].value_range == ValueRange(100_001, 250_000)
     verizon = next(t for t in transactions if "Verizon" in t.asset_description)
     assert verizon.asset_description == "Verizon Communications Inc. (VZ) [ST]"
+
+
+def test_printed_symbol_fills_ticker_for_stock_and_etf_lines_only():
+    transactions = _extract("20026537").transactions + _extract("20030646").transactions
+
+    tickers = {t.asset_description: t.ticker for t in transactions}
+    assert tickers["Amgen Inc. - Common Stock (AMGN) [ST]"] == "AMGN"
+    assert tickers["Procter & Gamble Company (PG) [ST]"] == "PG"
+    assert tickers["Rollins, Inc. Common Stock (ROL) [ST]"] == "ROL"
+    # A bond's parenthesized CUSIP is not a ticker.
+    assert tickers["US TREASURY BILL DUE 03/20/25 (912797KJ5) [GS]"] is None
+
+
+def test_printed_symbol_keeps_share_class_punctuation():
+    transactions = _extract("20024346").transactions
+
+    assert {t.ticker for t in transactions if "Berkshire" in t.asset_description} >= {"BRK.B"}
+    assert all(t.ticker is None for t in transactions if t.asset_type is AssetType.OPTION)
+
+
+def test_printed_symbol_is_uppercased_where_the_2021_font_lowercased_it():
+    transactions = _extract("20019582").transactions
+
+    assert transactions[1].asset_description == "American Airlines group, Inc. (AAl) [ST]"
+    assert transactions[1].ticker == "AAL"
+    assert transactions[0].ticker == "AMZN"
