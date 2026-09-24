@@ -107,6 +107,35 @@ against fakes with no live network call and no MinIO; only
 real `boto3` S3 client — which only succeeds where the Akamai check passes
 (a plain `urllib` request does not; see above).
 
+## Extract stage
+
+`src/capitol_lake/stages/extract.py` is the third caller of the bronze
+contract's counterpart on the silver side. `extract_house_filing` takes a
+bronze PDF's bytes plus its `bronze_key`, parses `chamber`/`year`/`doc_id`
+back out of that key, routes to `digital_extract.extract_digital` or
+`scanned_extract.extract_scanned` via `house_collect.route_doc_id` (no
+manual classification), and serializes the resulting `Filing` and
+`Transaction` rows into two Hive-partitioned Parquet part files — one per
+silver table (`filings`, `transactions`), one part per `doc_id`
+(`silver_key`, ADR 0008). Every transaction row extracted is kept regardless
+of `asset_type`, with `asset_type` and the original `asset_description`
+always present; this stage only routes and serializes, it never filters a
+row out. Like every other stage here, the pure function never touches S3 —
+it returns each part file's key and bytes, and
+`handlers/extract_handler.py` (real `boto3` client) reads the bronze PDF and
+writes both silver part files. It also raises `DocIdMismatchError` rather
+than write a row whose own `doc_id` disagrees with the bronze key it's
+partitioned under (the digital extractor reads `doc_id` from the PDF's own
+footer, independently of the bronze key).
+
+No `docker/extract.Dockerfile` or compose service yet: unlike the House and
+Senate collectors, `dnf install tesseract` isn't available on the AWS Lambda
+Python 3.12 base image's default repos, so packaging Tesseract into a
+container image for this stage needs a static binary or an EPEL-equivalent
+setup (ADR 0001), which is deferred rather than solved here. Exercise
+`extract_handler.py` directly (plain call, with real `boto3`/MinIO clients
+injected) instead of through the Lambda RIE until that's resolved.
+
 ## Running MinIO locally
 
 ```bash
