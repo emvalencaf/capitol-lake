@@ -189,3 +189,71 @@ def test_multi_page_filing_resolves_partial_sales_and_options():
 )
 def test_parse_value_range(raw, expected):
     assert parse_value_range(raw) == expected
+
+
+def test_absent_sub_owner_mid_table_nulls_the_field_instead_of_borrowing_the_next_asset():
+    # Lines 1 and 2 of this filing have no "Subholding Of" line: each is
+    # followed directly by the next transaction's asset line, which a
+    # positional walk would read as sub_owner.
+    transactions = _extract("20026696").transactions
+
+    assert [t.asset_description for t in transactions] == [
+        "Ethereum Crypto currency [CT]",
+        "Virtuals Protocol [CT]",
+        "Virtuals Protocol [CT]",
+    ]
+    assert all(t.sub_owner is None for t in transactions)
+    assert all(t.field_confidence["sub_owner"] == LOW_CONFIDENCE for t in transactions)
+    assert all(t.filing_status == "New" for t in transactions)
+    assert transactions[0].asset_type is AssetType.CRYPTOCURRENCY
+
+
+def test_asset_text_wrapped_past_a_page_break_stays_on_its_own_line():
+    # Line 16's transaction line ends page 2; its "(EOG) [ST]" asset tail and
+    # its labelled lines continue under page 3's repeated column header.
+    transactions = _extract("20030482").transactions
+
+    assert len(transactions) == 54
+    eog, ge = transactions[15], transactions[16]
+    assert eog.asset_description == "EOG Resources, Inc. Common Stock (EOG) [ST]"
+    assert eog.asset_type is AssetType.STOCK
+    assert eog.filing_status == "New"
+    assert eog.sub_owner == "JP Morgan Brokerage Account"
+    assert ge.asset_description == "GE Aerospace Common Stock (GE) [ST]"
+    assert all(t.sub_owner is not None for t in transactions)
+    assert all(t.asset_description.endswith("[ST]") for t in transactions)
+
+
+def test_amount_upper_bound_sharing_a_line_with_wrapped_asset_text_past_a_page_break():
+    # A transaction line ending page 2 with "$15,001 -" continues on page 3
+    # as "Common Stock (BRK.B) [ST] $50,000": asset tail and amount max share
+    # one line.
+    transactions = _extract("20024346").transactions
+
+    assert len(transactions) == 130
+    split = transactions[22]
+    assert split.owner is Owner.JOINT
+    assert split.transaction_type is TransactionType.PURCHASE
+    assert split.notification_date == date(2025, 1, 13)
+    assert split.asset_description == "Berkshire Hathaway Inc. New Common Stock (BRK.B) [ST]"
+    assert split.value_range == ValueRange(15_001, 50_000)
+    assert split.sub_owner == "Joint Ownership LPL Account"
+    assert all("\x00" not in t.asset_description for t in transactions)
+
+
+def test_wrapped_label_value_stays_with_its_own_line_not_the_next_asset():
+    # Each "Comments:" value in this filing wraps over three lines, directly
+    # above the next transaction's asset line.
+    transactions = _extract("20033574").transactions
+
+    assert len(transactions) == 12
+    first, second = transactions[0], transactions[1]
+    assert first.asset_description == "Berkshire Hathaway Inc. New Common Stock (BRK.B) [ST]"
+    assert first.description == "Buy to Close Covered Call Contract"
+    assert second.asset_description == "BRKB Option [OT]"
+    assert second.value_range == ValueRange(15_001, 50_000)
+    assert second.sub_owner == "LPL Account I"
+    assert second.description == "CALL BERKSHIRE CL B NEW $380 EXP 01/16/26"
+    assert all(t.filing_status == "New" for t in transactions)
+    assert all(t.asset_description.endswith(("[ST]", "[OT]", "[GS]")) for t in transactions)
+    assert not any("advisor" in t.asset_description for t in transactions)

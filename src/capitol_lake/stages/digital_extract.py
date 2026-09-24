@@ -1,27 +1,33 @@
 """Digital House PDF extractor: a text-layer PTR into silver `Filing`/`Transaction` rows.
 
-Follows ADR 0003. `pypdf` extracts the text layer; each Transaction is
-located by its transaction line, the `<type> <date> <date> <$range>` anchor
-(`_ANCHOR_RE`), and its other fields are read by walking away from that
-anchor: backward for the owner code and asset description, forward for the
-labelled lines (`Filing Status:`, `Subholding Of:`, `Description:`).
+Follows ADR 0003. `pypdf` reads the text layer as positioned chunks, which
+are rebuilt into visual lines (one per baseline, left to right). Each
+Transaction is located by its transaction line, the
+`<type> <date> <date> <$range>` anchor (`_ANCHOR_RE`), which shares its
+visual line with the first line of the asset cell. The other fields are
+read by walking away from that anchor, within the anchor's own table row:
+the asset text around it, then the labelled lines below it
+(`Filing Status:`, `Subholding Of:`, `Description:`, ...).
+
+Rows are delimited by vertical whitespace, not by text. Lines inside a
+row sit at most ~21pt apart, rows at least ~26pt (`_ROW_GAP`), measured over
+1,678 rows of 57 sampled 2025 filings. A wrapped label value (a long
+`Comments:`) therefore stays with its own row instead of leaking into the
+next row's asset description. A row a page break splits carries on past
+the next page's column header without an anchor of its own, and is joined
+back onto the row it continues.
 
 pypdf garbles the bold labels. With pypdf 6 every character after a word's
 first comes out as NUL (`F\\x00\\x00\\x00\\x00\\x00 S\\x00\\x00\\x00\\x00\\x00:`
 for `Filing Status:`); earlier versions inserted stray whitespace instead.
-So a candidate line is only accepted as a label once it matches the label's
+So a line is only accepted as a label once it matches the label's
 characters with all whitespace ignored and NUL standing in for any single
-character (`_label_pattern`). A line that doesn't match any label ends the
-forward walk, so a missing optional line (most often `Subholding Of:`)
-leaves its field null at `LOW_CONFIDENCE` rather than reading whatever
-line happens to sit at that offset. Section headers are never used as
-anchors; only the repeated column header and the `Filing ID #` page footer
-are dropped, so a Transaction split across a page break reads as one.
+character (`_label_pattern`). A label that isn't in a row leaves its field
+null at `LOW_CONFIDENCE`, never filled from whatever line sits at that
+offset. Section headers are never used as anchors.
 
-Two source quirks are kept rather than corrected: a notification date
-printed before its transaction date is stored exactly as printed, and a
-`Description:` value wrapped onto a second line would be read as the start
-of the next line's asset description (no fixture has one yet).
+A notification date printed before its transaction date (a known source
+bug) is kept exactly as printed, not corrected.
 """
 
 from __future__ import annotations
@@ -29,10 +35,11 @@ from __future__ import annotations
 import io
 import math
 import re
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from pypdf import PdfReader
+from pypdf import PageObject, PdfReader
 
 from capitol_lake.schema import (
     AssetType,
@@ -47,26 +54,29 @@ from capitol_lake.schema import (
 
 EXTRACTOR_NAME = "house-digital-pdf"
 
+# Confidence of a field read from a validated label or anchor.
+FULL_CONFIDENCE = 1.0
 # Confidence of a field the extractor looked for but didn't find.
 LOW_CONFIDENCE = 0.0
 
-# Optional labelled lines that follow a transaction line, by Transaction field.
-LABELS = {
+# Optional labelled lines under a transaction line, by Transaction field.
+_LABELS = {
     "filing_status": "Filing Status:",
     "sub_owner": "Subholding Of:",
     "description": "Description:",
 }
+# Labelled lines recognized so their text isn't read as another field, but
+# with no silver field yet: they are not stored.
+_UNSTORED_LABELS = {
+    "location": "Location:",
+    "comments": "Comments:",
+}
 
-# The column header pypdf repeats at the top of every page of the table.
-_COLUMN_HEADER = (
-    "ID Owner Asset Transaction",
-    "Type",
-    "Date Notification",
-    "Date",
-    "Amount Cap.",
-    "Gains >",
-    "$200?",
-)
+# Vertical gap, in points, above which the next line starts a new table row.
+_ROW_GAP = 23.5
+
+# Last line of the column header repeated at the top of every table page.
+_COLUMN_HEADER_END = "$200?"
 _TABLE_END_PREFIX = "* For the complete list of asset type abbreviations"
 _PAGE_FOOTER_RE = re.compile(r"^Filing ID #(?P<doc_id>\d+)$")
 
@@ -82,6 +92,9 @@ _ASSET_TYPE_CODE_RE = re.compile(r"\[(?P<code>[A-Z0-9]{2})\]$")
 _NAME_RE = re.compile(r"^Name:\s*(?P<name>.+)$", re.MULTILINE)
 _SIGNED_RE = re.compile(r"Digitally Signed:\s*.+?,\s*(?P<date>\d{2}/\d{2}/\d{4})")
 
+# A line under the transaction line ending in the amount's upper bound,
+# after any wrapped asset text sharing that visual line.
+_AMOUNT_TAIL_RE = re.compile(r"^(?P<asset>.*?)\s*(?P<max>\$[\d,]+)$")
 _RANGE_RE = re.compile(r"^\$(?P<min>[\d,]+)\s*-\s*\$(?P<max>[\d,]+)$")
 _OVER_RE = re.compile(r"Over \$(?P<min>[\d,]+)$")
 
@@ -121,14 +134,16 @@ def _label_pattern(label: str) -> re.Pattern[str]:
     return re.compile(r"^\s*" + r"\s*".join(parts) + r"\s*(?P<value>.*)$")
 
 
-_LABEL_PATTERNS = {name: _label_pattern(label) for name, label in LABELS.items()}
+_LABEL_PATTERNS = {
+    name: _label_pattern(label) for name, label in {**_LABELS, **_UNSTORED_LABELS}.items()
+}
 
 
-def _match_label(line: str) -> tuple[str, str | None] | None:
+def _match_label(line: str) -> tuple[str, str] | None:
     for name, pattern in _LABEL_PATTERNS.items():
         match = pattern.match(line)
         if match:
-            return name, match.group("value").strip() or None
+            return name, match.group("value").strip()
     return None
 
 
@@ -157,38 +172,164 @@ def parse_value_range(raw: str) -> ValueRange | None:
     return None
 
 
-def _table_lines(lines: list[str]) -> list[str]:
-    """The transaction table's lines, with page headers and footers removed."""
-    header = list(_COLUMN_HEADER)
-    table: list[str] = []
-    started = False
-    i = 0
-    while i < len(lines):
-        if lines[i : i + len(header)] == header:
-            started = True
-            i += len(header)
-            continue
-        line = lines[i]
-        i += 1
-        if not started or _PAGE_FOOTER_RE.match(line):
-            continue
-        if line.startswith(_TABLE_END_PREFIX):
-            break
-        table.append(line)
-    if not started:
+def _visual_lines(page: PageObject) -> list[tuple[float, str]]:
+    """A page's text as `(baseline y, text)` lines, top to bottom."""
+    chunks: dict[float, list[tuple[float, str]]] = defaultdict(list)
+
+    def visit(text, cm, tm, font, _size):
+        # pypdf also flushes the whole page's text once with no font and an
+        # identity matrix; only real, positioned chunks are kept.
+        if font is not None and text.strip():
+            y = round(tm[5] * cm[3] + cm[5], 1)
+            chunks[y].append((tm[4] * cm[0] + cm[4], text))
+
+    page.extract_text(visitor_text=visit)
+    return [
+        (y, " ".join(" ".join(text for _, text in sorted(chunks[y])).split()))
+        for y in sorted(chunks, reverse=True)
+    ]
+
+
+def _table_rows(pages: list[list[tuple[float, str]]]) -> list[list[str]]:
+    """Split the transaction table into rows, one per transaction line.
+
+    A run of lines with no transaction line (a row's labels pushed onto the
+    next page, or its wrapped asset text) continues the row above it.
+    """
+    if not any(text == _COLUMN_HEADER_END for lines in pages for _, text in lines):
         raise ValueError("no transaction table column header found")
-    return table
+    segments: list[list[str]] = []
+    for lines in pages:
+        texts = [text for _, text in lines]
+        if _COLUMN_HEADER_END not in texts:
+            continue
+        previous_y = None
+        for y, text in lines[texts.index(_COLUMN_HEADER_END) + 1 :]:
+            if text.startswith(_TABLE_END_PREFIX):
+                break
+            if _PAGE_FOOTER_RE.match(text):
+                continue
+            if previous_y is None or previous_y - y > _ROW_GAP:
+                segments.append([])
+            segments[-1].append(text)
+            previous_y = y
+
+    rows: list[list[str]] = []
+    for segment in segments:
+        anchors = sum(1 for text in segment if _ANCHOR_RE.search(text))
+        if anchors > 1:
+            # Never seen in the sampled filings; failing beats guessing
+            # which lines belong to which transaction.
+            raise ValueError(f"one table row holds {anchors} transaction lines: {segment[:3]!r}")
+        if anchors == 0 and rows:
+            rows[-1].extend(segment)
+        elif anchors == 1:
+            rows.append(segment)
+    return rows
 
 
-def _asset_fields(asset_text: str) -> tuple[str, str, AssetType, float]:
-    """Split an asset cell into (owner_raw, description, asset_type, asset_type confidence)."""
+@dataclass(frozen=True)
+class _AssetCell:
+    owner_raw: str
+    description: str
+    asset_type: AssetType
+    asset_type_confidence: float
+
+
+def _asset_cell(asset_lines: list[str]) -> _AssetCell:
+    """Split an asset cell's lines into its owner code, description and asset type."""
+    asset_text = " ".join(" ".join(asset_lines).split())
     owner_match = _OWNER_RE.match(asset_text)
     owner_raw = owner_match.group("owner") if owner_match else ""
     description = asset_text[owner_match.end() :] if owner_match else asset_text
     code_match = _ASSET_TYPE_CODE_RE.search(description)
     if code_match is None:
-        return owner_raw, description, AssetType.OTHER, LOW_CONFIDENCE
-    return owner_raw, description, _ASSET_TYPES.get(code_match.group("code"), AssetType.OTHER), 1.0
+        return _AssetCell(owner_raw, description, AssetType.OTHER, LOW_CONFIDENCE)
+    asset_type = _ASSET_TYPES.get(code_match.group("code"), AssetType.OTHER)
+    return _AssetCell(owner_raw, description, asset_type, FULL_CONFIDENCE)
+
+
+def _parse_filing(text: str, bronze_key: str) -> Filing:
+    doc_id = next(
+        (m.group("doc_id") for line in text.splitlines() if (m := _PAGE_FOOTER_RE.match(line))),
+        None,
+    )
+    name = _NAME_RE.search(text)
+    signed = _SIGNED_RE.search(text)
+    if doc_id is None or name is None or signed is None:
+        raise ValueError(f"{bronze_key}: missing Filing ID, Name or Digitally Signed line")
+    filing_date = _parse_date(signed.group("date"))
+    return Filing(
+        doc_id=doc_id,
+        chamber=Chamber.HOUSE,
+        filer_name=name.group("name").strip(),
+        filing_date=filing_date,
+        year=filing_date.year,
+        confidence=FULL_CONFIDENCE,
+        provenance=Provenance(bronze_key=bronze_key, extractor=EXTRACTOR_NAME),
+    )
+
+
+def _parse_row(row: list[str], filing: Filing, line_no: int) -> Transaction:
+    """One Transaction from a table row holding exactly one transaction line."""
+    anchor_at = next(i for i, text in enumerate(row) if _ANCHOR_RE.search(text))
+    anchor = _ANCHOR_RE.search(row[anchor_at])
+    asset_lines = [*row[:anchor_at], row[anchor_at][: anchor.start()]]
+    amount = anchor.group("amount")
+    value_range = parse_value_range(amount)
+
+    # Under the transaction line: wrapped asset text (the amount's upper
+    # bound may share its line), then labelled lines, each possibly wrapped.
+    labelled: dict[str, list[str]] = {}
+    current: list[str] | None = None
+    for text in row[anchor_at + 1 :]:
+        label = _match_label(text)
+        if label is not None:
+            name, value = label
+            if name in labelled:
+                current = []  # a repeated label's text is dropped, not merged
+            else:
+                current = labelled[name] = [value]
+            continue
+        if current is not None:
+            current.append(text)
+            continue
+        tail = _AMOUNT_TAIL_RE.match(text) if value_range is None else None
+        if tail is not None:
+            value_range = parse_value_range(f"{amount} {tail.group('max')}")
+            text = tail.group("asset")
+        asset_lines.append(text)
+    if value_range is None:
+        raise ValueError(f"{filing.provenance.bronze_key}: unreadable amount {amount!r}")
+
+    values = {name: " ".join(" ".join(parts).split()) or None for name, parts in labelled.items()}
+    asset = _asset_cell(asset_lines)
+    field_confidence = {
+        name: FULL_CONFIDENCE if values.get(name) is not None else LOW_CONFIDENCE
+        for name in _LABELS
+    }
+    field_confidence["asset_type"] = asset.asset_type_confidence
+    type_raw = anchor.group("type")
+    return Transaction(
+        doc_id=filing.doc_id,
+        line_no=line_no,
+        owner=_OWNERS[asset.owner_raw],
+        owner_raw=asset.owner_raw,
+        transaction_type=_TRANSACTION_TYPES[type_raw.upper()],
+        transaction_type_raw=type_raw,
+        asset_type=asset.asset_type,
+        asset_description=asset.description,
+        transaction_date=_parse_date(anchor.group("transaction_date")),
+        filing_date=filing.filing_date,
+        value_range=value_range,
+        confidence=FULL_CONFIDENCE,
+        provenance=filing.provenance,
+        notification_date=_parse_date(anchor.group("notification_date")),
+        filing_status=values.get("filing_status"),
+        sub_owner=values.get("sub_owner"),
+        description=values.get("description"),
+        field_confidence=field_confidence,
+    )
 
 
 def extract_digital(pdf_bytes: bytes, *, bronze_key: str) -> DigitalExtraction:
@@ -197,84 +338,11 @@ def extract_digital(pdf_bytes: bytes, *, bronze_key: str) -> DigitalExtraction:
     `pdf_bytes` is the bronze object at `bronze_key`, which is recorded as
     every row's provenance. Raises ValueError when a field the silver schema
     requires (filer name, filing date, doc id, a transaction's value range)
-    can't be read, rather than writing a guessed row.
+    can't be read, or the table can't be split into rows, rather than
+    writing a guessed row.
     """
-    reader = PdfReader(io.BytesIO(pdf_bytes))
-    text = "\n".join(page.extract_text() for page in reader.pages)
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-
-    doc_id = next((m.group("doc_id") for line in lines if (m := _PAGE_FOOTER_RE.match(line))), None)
-    name = _NAME_RE.search(text)
-    signed = _SIGNED_RE.search(text)
-    if doc_id is None or name is None or signed is None:
-        raise ValueError(f"{bronze_key}: missing Filing ID, Name or Digitally Signed line")
-    filing_date = _parse_date(signed.group("date"))
-    provenance = Provenance(bronze_key=bronze_key, extractor=EXTRACTOR_NAME)
-    filing = Filing(
-        doc_id=doc_id,
-        chamber=Chamber.HOUSE,
-        filer_name=name.group("name").strip(),
-        filing_date=filing_date,
-        year=filing_date.year,
-        confidence=1.0,
-        provenance=provenance,
-    )
-
-    table = _table_lines(lines)
-    transactions: list[Transaction] = []
-    block_start = 0
-    i = 0
-    while i < len(table):
-        anchor = _ANCHOR_RE.search(table[i])
-        if anchor is None:
-            i += 1
-            continue
-
-        asset_lines = [*table[block_start:i], table[i][: anchor.start()]]
-        asset_text = " ".join(" ".join(asset_lines).split())
-        owner_raw, asset_description, asset_type, asset_type_confidence = _asset_fields(asset_text)
-
-        amount = anchor.group("amount")
-        i += 1
-        value_range = parse_value_range(amount)
-        if value_range is None and i < len(table):
-            value_range = parse_value_range(f"{amount} {table[i]}")
-            i += 1
-        if value_range is None:
-            raise ValueError(f"{bronze_key}: unreadable amount {amount!r}")
-
-        labelled: dict[str, str | None] = {}
-        while i < len(table) and (label := _match_label(table[i])) is not None:
-            labelled.setdefault(*label)
-            i += 1
-        block_start = i
-
-        field_confidence = {
-            name: 1.0 if labelled.get(name) is not None else LOW_CONFIDENCE for name in LABELS
-        }
-        field_confidence["asset_type"] = asset_type_confidence
-        type_raw = anchor.group("type")
-        transactions.append(
-            Transaction(
-                doc_id=doc_id,
-                line_no=len(transactions) + 1,
-                owner=_OWNERS[owner_raw],
-                owner_raw=owner_raw,
-                transaction_type=_TRANSACTION_TYPES[type_raw.upper()],
-                transaction_type_raw=type_raw,
-                asset_type=asset_type,
-                asset_description=asset_description,
-                transaction_date=_parse_date(anchor.group("transaction_date")),
-                filing_date=filing_date,
-                value_range=value_range,
-                confidence=1.0,
-                provenance=provenance,
-                notification_date=_parse_date(anchor.group("notification_date")),
-                filing_status=labelled.get("filing_status"),
-                sub_owner=labelled.get("sub_owner"),
-                description=labelled.get("description"),
-                field_confidence=field_confidence,
-            )
-        )
-
+    pages = [_visual_lines(page) for page in PdfReader(io.BytesIO(pdf_bytes)).pages]
+    filing = _parse_filing("\n".join(text for lines in pages for _, text in lines), bronze_key)
+    rows = _table_rows(pages)
+    transactions = [_parse_row(row, filing, line_no) for line_no, row in enumerate(rows, 1)]
     return DigitalExtraction(filing=filing, transactions=transactions)
