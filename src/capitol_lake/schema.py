@@ -132,19 +132,26 @@ class Transaction:
     stage may try to recover. `confidence` is the lowest of these.
     `notification_date` is kept exactly as printed, even when it precedes
     `transaction_date` (a known source-side bug).
+
+    `transaction_type` and `value_range` are null for scanned filings: both
+    are hand/typed checkbox grids on the paper form (`ADR 0002`), and
+    resolving a checkbox mark to a specific letter needs the same
+    fixed-form-layout assumption zonal OCR would need for `transaction_type`
+    alone, which ADR 0002 already declined to build. A digital filing's
+    typed text always yields both, so they stay non-null there.
     """
 
     doc_id: str
     line_no: int
     owner: Owner
     owner_raw: str
-    transaction_type: TransactionType
+    transaction_type: TransactionType | None
     transaction_type_raw: str
     asset_type: AssetType
     asset_description: str
     transaction_date: date
     filing_date: InitVar[date]
-    value_range: ValueRange
+    value_range: ValueRange | None
     confidence: float
     provenance: Provenance
     ticker: str | None = None

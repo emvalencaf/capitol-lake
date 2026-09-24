@@ -61,6 +61,8 @@ Data engineering pipeline.
 * [`uv`](https://docs.astral.sh/uv/)
 * [Docker](https://docs.docker.com/get-docker/) and `docker-compose`, for the
   local MinIO/Lambda scaffold
+* [Tesseract OCR](https://tesseract-ocr.github.io/) (`tesseract-ocr` on
+  Debian/Ubuntu), for the scanned House PDF extractor's tests
 
 ### Installation
 
