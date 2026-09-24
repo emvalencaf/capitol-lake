@@ -79,15 +79,20 @@ class Provenance:
 
 @dataclass(frozen=True)
 class ValueRange:
-    """The `(min, max)` bracket a Transaction's reported value falls in."""
+    """The `(min, max)` bracket a Transaction's reported value falls in.
+
+    `max` is null for an open-ended bracket (`Over $50,000,000`): there is
+    no upper bound, and a null stays valid JSON and never poisons a sum the
+    way an infinity would.
+    """
 
     min: float
-    max: float
+    max: float | None
 
     def __post_init__(self) -> None:
         if self.min < 0:
             raise ValueError(f"min must be >= 0, got {self.min!r}")
-        if self.max < self.min:
+        if self.max is not None and self.max < self.min:
             raise ValueError(f"max ({self.max!r}) must be >= min ({self.min!r})")
 
 
@@ -121,8 +126,10 @@ class Transaction:
     `notification_date`, `filing_status`, `sub_owner` (the form's
     "Subholding Of" line) and `description` are optional per-line fields an
     extractor may or may not find. Each is null when not found, never
-    guessed, and `field_confidence` records how sure the extractor is of
-    each such field, so a null reads as "not found" rather than "unknown".
+    guessed. `field_confidence` records how sure the extractor is of each
+    such field: a null at full confidence means the source has no such
+    line; a low one means it couldn't be read, which is what a fallback
+    stage may try to recover. `confidence` is the lowest of these.
     `notification_date` is kept exactly as printed, even when it precedes
     `transaction_date` (a known source-side bug).
     """
@@ -145,7 +152,7 @@ class Transaction:
     filing_status: str | None = None
     sub_owner: str | None = None
     description: str | None = None
-    field_confidence: Mapping[str, float] = field(default_factory=dict)
+    field_confidence: Mapping[str, float] = field(default_factory=dict, hash=False)
     disclosure_lag: int = field(init=False)
 
     def __post_init__(self, filing_date: date) -> None:

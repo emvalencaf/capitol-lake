@@ -163,3 +163,15 @@ def test_optional_line_fields_default_to_null():
 def test_field_confidence_out_of_range_rejected():
     with pytest.raises(ValueError, match="confidence"):
         _transaction(field_confidence={"sub_owner": 1.5})
+
+
+def test_value_range_max_is_null_for_an_open_ended_bracket():
+    open_ended = ValueRange(min=50_000_001, max=None)
+
+    assert open_ended.max is None
+
+
+def test_transaction_with_field_confidence_is_hashable():
+    transaction = _transaction(field_confidence={"sub_owner": 1.0})
+
+    assert hash(transaction) == hash(_transaction(field_confidence={"sub_owner": 0.0}))

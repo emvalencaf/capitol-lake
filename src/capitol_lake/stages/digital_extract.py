@@ -17,14 +17,21 @@ next row's asset description. A row a page break splits carries on past
 the next page's column header without an anchor of its own, and is joined
 back onto the row it continues.
 
+Older forms (2020-2022) come out with some capitals mapped to lowercase
+(`Filing Id`, `[gS]`, `(AAl)`), so every structural match is
+case-insensitive; the text itself is kept as pypdf reads it.
+
 pypdf garbles the bold labels. With pypdf 6 every character after a word's
 first comes out as NUL (`F\\x00\\x00\\x00\\x00\\x00 S\\x00\\x00\\x00\\x00\\x00:`
 for `Filing Status:`); earlier versions inserted stray whitespace instead.
 So a line is only accepted as a label once it matches the label's
 characters with all whitespace ignored and NUL standing in for any single
 character (`_label_pattern`). A label that isn't in a row leaves its field
-null at `LOW_CONFIDENCE`, never filled from whatever line sits at that
-offset. Section headers are never used as anchors.
+null, never filled from whatever line sits at that offset. Since the row's
+lines are all accounted for, that null is confident: the form has no such
+line. `LOW_CONFIDENCE` is kept for what is there but unreadable (a label
+with no value, an asset with no type code), which is what a fallback stage
+may try to recover. Section headers are never used as anchors.
 
 A notification date printed before its transaction date (a known source
 bug) is kept exactly as printed, not corrected.
@@ -33,7 +40,6 @@ bug) is kept exactly as printed, not corrected.
 from __future__ import annotations
 
 import io
-import math
 import re
 from collections import defaultdict
 from dataclasses import dataclass
@@ -56,7 +62,7 @@ EXTRACTOR_NAME = "house-digital-pdf"
 
 # Confidence of a field read from a validated label or anchor.
 FULL_CONFIDENCE = 1.0
-# Confidence of a field the extractor looked for but didn't find.
+# Confidence of a field present in the source but not readable.
 LOW_CONFIDENCE = 0.0
 
 # Optional labelled lines under a transaction line, by Transaction field.
@@ -72,13 +78,16 @@ _UNSTORED_LABELS = {
     "comments": "Comments:",
 }
 
+# Font the 2021 form draws its cap-gains checkboxes in, as glyph text.
+_CHECKBOX_FONT_SUFFIX = "Marlett"
+
 # Vertical gap, in points, above which the next line starts a new table row.
 _ROW_GAP = 23.5
 
 # Last line of the column header repeated at the top of every table page.
 _COLUMN_HEADER_END = "$200?"
 _TABLE_END_PREFIX = "* For the complete list of asset type abbreviations"
-_PAGE_FOOTER_RE = re.compile(r"^Filing ID #(?P<doc_id>\d+)$")
+_PAGE_FOOTER_RE = re.compile(r"^Filing ID #(?P<doc_id>\d+)$", re.IGNORECASE)
 
 _ANCHOR_RE = re.compile(
     r"(?:^|\s)(?P<type>S \(partial\)|P|S|E)\s+"
@@ -88,8 +97,8 @@ _ANCHOR_RE = re.compile(
     re.IGNORECASE,
 )
 _OWNER_RE = re.compile(r"^(?P<owner>SP|JT|DC)\s+")
-_ASSET_TYPE_CODE_RE = re.compile(r"\[(?P<code>[A-Z0-9]{2})\]$")
-_NAME_RE = re.compile(r"^Name:\s*(?P<name>.+)$", re.MULTILINE)
+_ASSET_TYPE_CODE_RE = re.compile(r"\[(?P<code>[A-Z0-9]{2})\]$", re.IGNORECASE)
+_NAME_RE = re.compile(r"^Name:\s*(?P<name>.+)$", re.MULTILINE | re.IGNORECASE)
 _SIGNED_RE = re.compile(r"Digitally Signed:\s*.+?,\s*(?P<date>\d{2}/\d{2}/\d{4})")
 
 # A line under the transaction line ending in the amount's upper bound,
@@ -131,7 +140,8 @@ def _label_pattern(label: str) -> re.Pattern[str]:
     parts = [
         f"[{re.escape(c)}\x00]" if c.isalnum() else re.escape(c) for c in label if not c.isspace()
     ]
-    return re.compile(r"^\s*" + r"\s*".join(parts) + r"\s*(?P<value>.*)$")
+    # Case-insensitive: the 2021 form's small-caps labels come out mixed-case.
+    return re.compile(r"^\s*" + r"\s*".join(parts) + r"\s*(?P<value>.*)$", re.IGNORECASE)
 
 
 _LABEL_PATTERNS = {
@@ -159,7 +169,7 @@ def parse_value_range(raw: str) -> ValueRange | None:
     """Parse a House amount column (`$1,001 - $15,000`, `Over $50,000,000`).
 
     An open-ended `Over $X` bracket starts one dollar above `X`, matching how
-    the closed brackets start (`$1,001`), and has no upper bound. Returns
+    the closed brackets start (`$1,001`), and has a null upper bound. Returns
     None for text that isn't a complete amount.
     """
     raw = " ".join(raw.split())
@@ -168,7 +178,7 @@ def parse_value_range(raw: str) -> ValueRange | None:
         return ValueRange(_dollars(match.group("min")), _dollars(match.group("max")))
     match = _OVER_RE.search(raw)
     if match:
-        return ValueRange(_dollars(match.group("min")) + 1, math.inf)
+        return ValueRange(_dollars(match.group("min")) + 1, None)
     return None
 
 
@@ -179,13 +189,18 @@ def _visual_lines(page: PageObject) -> list[tuple[float, str]]:
     def visit(text, cm, tm, font, _size):
         # pypdf also flushes the whole page's text once with no font and an
         # identity matrix; only real, positioned chunks are kept.
-        if font is not None and text.strip():
-            y = round(tm[5] * cm[3] + cm[5], 1)
-            chunks[y].append((tm[4] * cm[0] + cm[4], text))
+        if font is None or not text.strip():
+            return
+        if str(font.get("/BaseFont", "")).endswith(_CHECKBOX_FONT_SUFFIX):
+            return
+        y = round(tm[5] * cm[3] + cm[5], 1)
+        chunks[y].append((tm[4] * cm[0] + cm[4], text))
 
     page.extract_text(visitor_text=visit)
+    # Sort by x only: chunks of one text object can share an x, and then
+    # only their emission order is right.
     return [
-        (y, " ".join(" ".join(text for _, text in sorted(chunks[y])).split()))
+        (y, " ".join(" ".join(text for _, text in sorted(chunks[y], key=lambda c: c[0])).split()))
         for y in sorted(chunks, reverse=True)
     ]
 
@@ -205,7 +220,7 @@ def _table_rows(pages: list[list[tuple[float, str]]]) -> list[list[str]]:
             continue
         previous_y = None
         for y, text in lines[texts.index(_COLUMN_HEADER_END) + 1 :]:
-            if text.startswith(_TABLE_END_PREFIX):
+            if text.lower().startswith(_TABLE_END_PREFIX.lower()):
                 break
             if _PAGE_FOOTER_RE.match(text):
                 continue
@@ -245,7 +260,7 @@ def _asset_cell(asset_lines: list[str]) -> _AssetCell:
     code_match = _ASSET_TYPE_CODE_RE.search(description)
     if code_match is None:
         return _AssetCell(owner_raw, description, AssetType.OTHER, LOW_CONFIDENCE)
-    asset_type = _ASSET_TYPES.get(code_match.group("code"), AssetType.OTHER)
+    asset_type = _ASSET_TYPES.get(code_match.group("code").upper(), AssetType.OTHER)
     return _AssetCell(owner_raw, description, asset_type, FULL_CONFIDENCE)
 
 
@@ -304,8 +319,9 @@ def _parse_row(row: list[str], filing: Filing, line_no: int) -> Transaction:
 
     values = {name: " ".join(" ".join(parts).split()) or None for name, parts in labelled.items()}
     asset = _asset_cell(asset_lines)
+    # An absent label is a confident null; a label with no value is not.
     field_confidence = {
-        name: FULL_CONFIDENCE if values.get(name) is not None else LOW_CONFIDENCE
+        name: LOW_CONFIDENCE if name in labelled and values[name] is None else FULL_CONFIDENCE
         for name in _LABELS
     }
     field_confidence["asset_type"] = asset.asset_type_confidence
@@ -322,7 +338,7 @@ def _parse_row(row: list[str], filing: Filing, line_no: int) -> Transaction:
         transaction_date=_parse_date(anchor.group("transaction_date")),
         filing_date=filing.filing_date,
         value_range=value_range,
-        confidence=FULL_CONFIDENCE,
+        confidence=min(field_confidence.values()),
         provenance=filing.provenance,
         notification_date=_parse_date(anchor.group("notification_date")),
         filing_status=values.get("filing_status"),

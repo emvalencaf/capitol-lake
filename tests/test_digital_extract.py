@@ -5,7 +5,6 @@ so these tests pin the field values the extractor resolves to, not the
 pypdf text it resolves them from.
 """
 
-import math
 from datetime import date
 from pathlib import Path
 
@@ -14,7 +13,7 @@ import pytest
 from capitol_lake.schema import AssetType, Chamber, Owner, TransactionType, ValueRange
 from capitol_lake.stages.digital_extract import (
     EXTRACTOR_NAME,
-    LOW_CONFIDENCE,
+    FULL_CONFIDENCE,
     extract_digital,
     parse_value_range,
 )
@@ -84,17 +83,25 @@ def test_absent_sub_owner_line_nulls_the_field_instead_of_borrowing_a_neighbour(
     second = _extract("20030646").transactions[1]
 
     assert second.sub_owner is None
-    assert second.field_confidence["sub_owner"] == LOW_CONFIDENCE
     assert second.filing_status == "New"
-    assert second.field_confidence["filing_status"] == 1.0
 
 
-def test_matched_labels_are_reported_at_full_field_confidence():
-    first = _extract("20030646").transactions[0]
+def test_a_label_absent_from_its_row_is_a_confident_null_not_a_low_confidence_one():
+    # A row's lines are all accounted for, so a missing optional label means
+    # the form has no such line, not that it couldn't be read: nothing for a
+    # fallback stage to recover.
+    first, second = _extract("20030646").transactions
 
-    assert first.field_confidence["sub_owner"] == 1.0
-    assert first.field_confidence["filing_status"] == 1.0
-    assert first.field_confidence["description"] == LOW_CONFIDENCE
+    assert first.description is None
+    assert second.sub_owner is None
+    assert first.field_confidence == {
+        "filing_status": FULL_CONFIDENCE,
+        "sub_owner": FULL_CONFIDENCE,
+        "description": FULL_CONFIDENCE,
+        "asset_type": FULL_CONFIDENCE,
+    }
+    assert second.field_confidence["sub_owner"] == FULL_CONFIDENCE
+    assert first.confidence == second.confidence == FULL_CONFIDENCE
 
 
 def test_notification_date_before_transaction_date_is_surfaced_uncorrected():
@@ -183,8 +190,8 @@ def test_multi_page_filing_resolves_partial_sales_and_options():
     ("raw", "expected"),
     [
         ("$1,001 - $15,000", ValueRange(1_001, 15_000)),
-        ("Over $50,000,000", ValueRange(50_000_001, math.inf)),
-        ("Spouse/DC Over $1,000,000", ValueRange(1_000_001, math.inf)),
+        ("Over $50,000,000", ValueRange(50_000_001, None)),
+        ("Spouse/DC Over $1,000,000", ValueRange(1_000_001, None)),
     ],
 )
 def test_parse_value_range(raw, expected):
@@ -203,7 +210,7 @@ def test_absent_sub_owner_mid_table_nulls_the_field_instead_of_borrowing_the_nex
         "Virtuals Protocol [CT]",
     ]
     assert all(t.sub_owner is None for t in transactions)
-    assert all(t.field_confidence["sub_owner"] == LOW_CONFIDENCE for t in transactions)
+    assert all(t.field_confidence["sub_owner"] == FULL_CONFIDENCE for t in transactions)
     assert all(t.filing_status == "New" for t in transactions)
     assert transactions[0].asset_type is AssetType.CRYPTOCURRENCY
 
@@ -257,3 +264,22 @@ def test_wrapped_label_value_stays_with_its_own_line_not_the_next_asset():
     assert all(t.filing_status == "New" for t in transactions)
     assert all(t.asset_description.endswith(("[ST]", "[OT]", "[GS]")) for t in transactions)
     assert not any("advisor" in t.asset_description for t in transactions)
+
+
+def test_2021_form_template_with_scrambled_label_case_and_checkbox_glyphs():
+    # The 2021 form renders labels in small caps ("F IlINg S TATuS :"), maps
+    # some capitals to lowercase, and draws the cap-gains checkboxes as glyph
+    # text between the asset lines.
+    result = _extract("20019582")
+
+    assert result.filing.filer_name == "Hon. Patrick Fallon"
+    assert result.filing.filing_date == date(2021, 10, 5)
+    transactions = result.transactions
+    assert len(transactions) == 18
+    assert all(t.filing_status == "New" for t in transactions)
+    assert transactions[0].asset_description == "Amazon.com, Inc. (AMZN) [ST]"
+    assert transactions[1].asset_description == "American Airlines group, Inc. (AAl) [ST]"
+    assert transactions[3].asset_description == "CrowdStrike Holdings, I nc. - Class A (CRWD) [ST]"
+    assert transactions[4].value_range == ValueRange(100_001, 250_000)
+    verizon = next(t for t in transactions if "Verizon" in t.asset_description)
+    assert verizon.asset_description == "Verizon Communications Inc. (VZ) [ST]"
