@@ -13,6 +13,7 @@ import pyarrow.parquet as pq
 import pytest
 
 from capitol_lake.stages.extract import (
+    DocIdMismatchError,
     UnrecognizedBronzeKeyError,
     extract_house_filing,
 )
@@ -94,11 +95,21 @@ def test_transactions_parquet_always_carries_asset_type_and_description():
         assert row["doc_id"] == "20030646"
 
 
-def test_scanned_filing_with_no_transactions_still_writes_a_valid_empty_table():
+def test_unreadable_scanned_filing_raises_before_writing():
     # 8218417 is real scan noise the extractor can't read a filer name or
-    # filing date from at all (ADR 0002) - it never reaches transaction
-    # extraction, so it exercises the ValueError propagation path instead.
+    # filing date from at all (ADR 0002); extraction raises before this
+    # stage ever gets to serialize a row.
     pdf_bytes = (FIXTURES / "house_scanned_8218417.pdf").read_bytes()
 
     with pytest.raises(ValueError):
         extract_house_filing(pdf_bytes, bronze_key="bronze/house/year=2021/8218417.pdf")
+
+
+def test_doc_id_disagreeing_with_the_bronze_key_is_never_silently_written():
+    # The PDF's own "Filing ID #" footer says 20030646; giving it a bronze
+    # key under a different doc id must raise rather than write the row
+    # under a partition path that disagrees with its own doc_id field.
+    pdf_bytes = (FIXTURES / "house_digital_20030646.pdf").read_bytes()
+
+    with pytest.raises(DocIdMismatchError):
+        extract_house_filing(pdf_bytes, bronze_key="bronze/house/year=2025/20099999.pdf")

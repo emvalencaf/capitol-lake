@@ -76,6 +76,19 @@ class UnrecognizedBronzeKeyError(ValueError):
     """A bronze key doesn't match the `bronze/<chamber>/year=<year>/<doc_id>.<ext>` layout."""
 
 
+class DocIdMismatchError(ValueError):
+    """The extracted `Filing.doc_id` disagrees with the bronze key's own doc id.
+
+    The digital extractor reads `doc_id` from the PDF's own "Filing ID #"
+    footer, independently of the bronze key it was fetched/stored under
+    (unlike the scanned extractor, which has no such footer to read and
+    always derives it from the bronze key). A silver row is partitioned by
+    the bronze key's doc id (`silver_key`); writing it under a path that
+    disagrees with the doc id inside the row itself would be a silent,
+    undetectable data-integrity bug, so this is raised instead.
+    """
+
+
 def _parse_bronze_key(bronze_key: str) -> tuple[str, int, str]:
     match = _BRONZE_KEY_RE.match(bronze_key)
     if match is None:
@@ -144,10 +157,19 @@ def extract_house_filing(pdf_bytes: bytes, *, bronze_key: str) -> dict[str, Any]
     "transactions": {"key": ..., "bytes": ...}}`: one Hive-partitioned
     Parquet part file per silver table, at one part per `doc_id` (ADR 0008).
     The actual S3 write is the caller's job, as with every other stage here.
+    Raises `DocIdMismatchError` if the extracted `Filing.doc_id` disagrees
+    with the bronze key's own doc id, rather than silently writing a row
+    under a partition path that disagrees with the doc id inside it.
     """
     chamber, year, doc_id = _parse_bronze_key(bronze_key)
     kind = route_doc_id(doc_id)
     extraction = _EXTRACTORS[kind](pdf_bytes, bronze_key=bronze_key)
+
+    if extraction.filing.doc_id != doc_id:
+        raise DocIdMismatchError(
+            f"{bronze_key}: filing doc_id {extraction.filing.doc_id!r} "
+            f"disagrees with the bronze key's doc id {doc_id!r}"
+        )
 
     return {
         "kind": kind,

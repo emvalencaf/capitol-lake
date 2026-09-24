@@ -123,7 +123,18 @@ always present; this stage only routes and serializes, it never filters a
 row out. Like every other stage here, the pure function never touches S3 —
 it returns each part file's key and bytes, and
 `handlers/extract_handler.py` (real `boto3` client) reads the bronze PDF and
-writes both silver part files.
+writes both silver part files. It also raises `DocIdMismatchError` rather
+than write a row whose own `doc_id` disagrees with the bronze key it's
+partitioned under (the digital extractor reads `doc_id` from the PDF's own
+footer, independently of the bronze key).
+
+No `docker/extract.Dockerfile` or compose service yet: unlike the House and
+Senate collectors, `dnf install tesseract` isn't available on the AWS Lambda
+Python 3.12 base image's default repos, so packaging Tesseract into a
+container image for this stage needs a static binary or an EPEL-equivalent
+setup (ADR 0001), which is deferred rather than solved here. Exercise
+`extract_handler.py` directly (plain call, with real `boto3`/MinIO clients
+injected) instead of through the Lambda RIE until that's resolved.
 
 ## Running MinIO locally
 
