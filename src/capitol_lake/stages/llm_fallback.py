@@ -65,7 +65,6 @@ _ENUM_FIELDS: dict[str, type] = {
 }
 _DATE_FIELDS = frozenset({"transaction_date", "notification_date"})
 _NUMBER_FIELDS = frozenset({"value_min", "value_max"})
-_VALUE_RANGE_FIELDS = frozenset({"value_min", "value_max"})
 
 _ACCESSORS: dict[str, Callable[[Transaction], Any]] = {
     "owner": lambda t: t.owner.value if t.owner is not None else None,

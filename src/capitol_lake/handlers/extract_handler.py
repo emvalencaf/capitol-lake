@@ -11,16 +11,36 @@ queried per row, since it's a static full listing, not a search endpoint.
 Handlers stay thin by convention: they only translate the event shape and
 real clients into the pure function's arguments and are not unit-tested
 (see docs/local-dev.md); the pure functions underneath are.
+
+The LLM fallback stage (#41) is wired the same way, conditionally:
+`_build_llm_fallback` only returns a callable when `LLM_FALLBACK_ENABLED` is
+set, an eval report is available at `LLM_FALLBACK_EVAL_REPORT` (the JSON
+`scripts/run_eval.py --json` produces), and that report's `by_kind[kind]`
+scores actually leave at least one field below `LLM_FALLBACK_THRESHOLD`
+(`llm_fallback.eligible_fields_from_scores`) — never unconditionally on
+every null, per the issue's acceptance criteria. Only the digital path
+(text structured output over the PDF's own text layer) is wired here: a
+scanned filing's vision fallback needs the specific page image a
+transaction's row came from, which `scanned_extract.ScannedExtraction`
+doesn't yet track per transaction, so `apply_vision_fallback` (fully
+implemented and tested in `stages/llm_fallback.py`) is left for a follow-up
+once that tracking exists, rather than guessing which page to send.
 """
 
+import io
 import json
 import os
+from pathlib import Path
 from urllib.request import Request, urlopen
 
 import boto3
+from pypdf import PdfReader
 
-from capitol_lake.schema import AssetType
+from capitol_lake.llm_providers import provider_from_env
+from capitol_lake.schema import AssetType, Transaction
 from capitol_lake.stages.extract import extract_house_filing
+from capitol_lake.stages.house_collect import route_doc_id
+from capitol_lake.stages.llm_fallback import apply_text_fallback, eligible_fields_from_scores
 from capitol_lake.stages.ticker_resolve import (
     EdgarCompany,
     parse_edgar_company_tickers,
@@ -34,6 +54,8 @@ SILVER_BUCKET = os.environ.get("SILVER_BUCKET", "silver")
 
 OPENFIGI_SEARCH_URL = "https://api.openfigi.com/v3/search"
 EDGAR_COMPANY_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
+
+_DEFAULT_LLM_FALLBACK_THRESHOLD = 0.8
 
 _EDGAR_COMPANIES: list[EdgarCompany] | None = None
 
@@ -75,13 +97,60 @@ def _resolve_ticker(asset_description: str, asset_type: AssetType) -> str | None
     )
 
 
+def _digital_source_text(pdf_bytes: bytes) -> str:
+    return "\n".join(page.extract_text() for page in PdfReader(io.BytesIO(pdf_bytes)).pages)
+
+
+def _build_llm_fallback(kind: str, pdf_bytes: bytes):
+    """A digital-filing `llm_fallback` callable for `extract_house_filing`, or `None`.
+
+    `None` (no fallback at all) whenever any gate isn't satisfied: the
+    feature flag is off, no eval report is configured/found, or that
+    report's `by_kind[kind]` scores leave nothing below the threshold. See
+    module docstring for why `kind == "scanned"` always yields `None` here.
+    """
+    if os.environ.get("LLM_FALLBACK_ENABLED", "").lower() not in ("1", "true"):
+        return None
+    if kind != "digital":
+        return None
+
+    report_path = os.environ.get("LLM_FALLBACK_EVAL_REPORT")
+    if not report_path or not Path(report_path).is_file():
+        return None
+    report = json.loads(Path(report_path).read_text())
+    scores = report.get("by_kind", {}).get(kind, {})
+    threshold = float(os.environ.get("LLM_FALLBACK_THRESHOLD", _DEFAULT_LLM_FALLBACK_THRESHOLD))
+    eligible_fields = eligible_fields_from_scores(scores, threshold)
+    if not eligible_fields:
+        return None
+
+    provider = provider_from_env()
+    source_text = _digital_source_text(pdf_bytes)
+
+    def _llm_fallback(transaction: Transaction) -> Transaction:
+        return apply_text_fallback(
+            transaction,
+            eligible_fields,
+            source_text=source_text,
+            complete_text=provider.complete_text,
+        )
+
+    return _llm_fallback
+
+
 def handler(event: dict, context: object) -> dict:
     s3_client = boto3.client("s3", endpoint_url=os.environ.get("AWS_ENDPOINT_URL_S3"))
 
     bronze_key = event["bronze_key"]
     pdf_bytes = s3_client.get_object(Bucket=BRONZE_BUCKET, Key=bronze_key)["Body"].read()
 
-    result = extract_house_filing(pdf_bytes, bronze_key=bronze_key, resolve_ticker=_resolve_ticker)
+    kind = route_doc_id(Path(bronze_key).stem)
+    result = extract_house_filing(
+        pdf_bytes,
+        bronze_key=bronze_key,
+        resolve_ticker=_resolve_ticker,
+        llm_fallback=_build_llm_fallback(kind, pdf_bytes),
+    )
 
     for table in ("filings", "transactions"):
         part = result[table]
