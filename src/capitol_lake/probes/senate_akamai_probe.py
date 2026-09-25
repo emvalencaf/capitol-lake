@@ -173,12 +173,24 @@ def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
             home_response = page.goto(SENATE_HOME_URL, wait_until="networkidle")
             home_status_code = home_response.status if home_response is not None else 0
 
-            checkbox = page.locator(_AGREEMENT_CHECKBOX_SELECTOR)
+            # A plain Locator.check() hung indefinitely (30s timeout) here on
+            # a real Lambda run: Playwright's actionability engine waits out
+            # any navigation the click triggers as part of the click itself,
+            # and that wait never resolved in this environment — plausibly
+            # interacting badly with --single-process. Setting the checkbox
+            # and submitting its form purely via JS sidesteps Playwright's
+            # click-driven navigation wait entirely; only the explicit
+            # `wait_for_load_state` below waits for the resulting page.
             agreement_accepted = False
-            if checkbox.count() > 0:
-                checkbox.check()
-                with page.expect_navigation(wait_until="networkidle"):
-                    checkbox.evaluate("el => el.form.submit()")
+            if page.locator(_AGREEMENT_CHECKBOX_SELECTOR).count() > 0:
+                page.evaluate(
+                    """() => {
+                        const cb = document.querySelector('input[name="prohibition_agreement"]');
+                        cb.checked = true;
+                        cb.form.submit();
+                    }"""
+                )
+                page.wait_for_load_state("networkidle")
                 agreement_accepted = True
 
             response = page.goto(url, wait_until="networkidle")
