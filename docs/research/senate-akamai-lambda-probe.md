@@ -26,18 +26,65 @@ down; this is a throwaway diagnostic, not infra kept running.
 
 ## Result
 
-**Superseded once, see below — two cold-request runs on 2026-09-25 turned
-out not to be meaningful evidence, and `run_probe` was corrected as a
-result.** #29 itself scopes this ticket as "stays open and unclaimed here
-until a future implementation/cloud-lift effort picks it up"; the human
-operating this repo went ahead and ran the probe anyway against a real AWS
-account (`us-east-1`), working through a chain of deploy-time bugs along the
-way (Playwright headless-shell binary vs. full Chromium,
+**2026-09-25, `us-east-1` — PASS: a Lambda-origin headless-Playwright
+request clears the check and gets the real filing, the same way #23's
+local-network probe did — once the probe correctly replicates the local
+runs' full flow (warm-up navigation, accept the site's own agreement gate
+via a real trusted click, then request the filing).** #29 itself scopes this
+ticket as "stays open and unclaimed here until a future
+implementation/cloud-lift effort picks it up"; the human operating this repo
+went ahead and ran the probe anyway against a real AWS account
+(`us-east-1`). It took six attempts and several rounds of fixes — both
+deploy-time bugs (Playwright headless-shell binary vs. full Chromium,
 `PLAYWRIGHT_BROWSERS_PATH` resolving under the wrong `$HOME` at Lambda
 runtime, missing `--no-sandbox`/`--disable-gpu`/`--disable-dev-shm-usage`/
-`--single-process` launch flags — see git history on
-`feat/senate-lambda-akamai-probe` for each fix). Filing probed:
+`--single-process` launch flags) and probe-logic corrections (see the
+**Attempts** section below) — see git history on
+`feat/senate-lambda-akamai-probe` for each fix. Filing probed:
 `b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f`.
+
+**Final, decisive result:**
+
+```json
+{
+  "filing_id": "b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f",
+  "status_code": 200,
+  "outcome": "cleared",
+  "final_url": "https://efdsearch.senate.gov/search/view/ptr/b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f/",
+  "home_status_code": 200,
+  "agreement_accepted": true,
+  "post_agreement_url": "https://efdsearch.senate.gov/search/"
+}
+```
+
+`final_url` matches the requested filing URL exactly, `outcome` is
+`"cleared"` (page titled `eFD: Print Periodic Transaction Report`, per
+`CLEARED_TITLE_MARKER`), and `post_agreement_url` (`/search/`, not bounced
+back to the homepage) confirms the agreement gate was genuinely accepted
+this time — a real, trusted `Locator.click()` fixed what attempt 4's
+synthetic JS submit couldn't. **Answer to #29's exact ask**: yes, a Lambda
+egress IP clears the Akamai bot/fingerprint check the same way #23's local
+probe did, provided the automation drives the real access flow (warm-up
+navigation + agreement acceptance via a trusted click) rather than a single
+cold request at the filing URL. Nothing in this result points at cloud-IP
+reputation being a distinct blocker, as #17's original note worried —
+the earlier "blocks" (attempts 1-4) all trace to this probe not yet
+replicating the real flow, not to anything about the Lambda IP itself.
+
+**Feeds into #28**: a headless-browser (Playwright) collection step inside
+the cloud pipeline is **now validated as technically viable** from a real
+Lambda egress IP. Whatever #28 ultimately decides (still open: cost/
+maintenance/brittleness tradeoffs, e.g. a browser binary in the Lambda
+image, sensitivity to the site's markup changing) is no longer blocked on
+this unverified fact — it's confirmed workable, not merely hypothesized.
+
+**Housekeeping**: this ticket's probe infra
+(`infra/probes/senate-akamai-probe/`) has no ongoing purpose now that the
+question is answered — tear it down with
+`./scripts/deploy-senate-akamai-probe.sh down` (or `terraform destroy`)
+once #28 has what it needs from this result.
+
+## Attempts (chronological)
 
 Both attempts (the first without `final_url`, the second with it) landed on
 `final_url` `https://efdsearch.senate.gov/search/home/` instead of the
@@ -150,24 +197,18 @@ navigated the page away (the original element is detached). That strongly
 suggests the real click's own submission likely succeeded before attempt
 2 was ever recorded as a hard failure — we just never read the result.
 
-`run_probe` now uses a real, trusted `Locator.click()` (not `.check()`, so
-no unreachable post-click "still checked" verification; timeout tolerated
-via `try`/`except`, since the click and its navigation may already have
-succeeded by the time it fires) instead of the JS-only submit. **Not yet
-rerun with this fix.** Next step: redeploy
-(`./scripts/deploy-senate-akamai-probe.sh up`) and `invoke` again, and
-record here:
+`run_probe` was corrected to use a real, trusted `Locator.click()` (not
+`.check()`, so no unreachable post-click "still checked" verification;
+timeout tolerated via `try`/`except`, since the click and its navigation may
+already have succeeded by the time it fires) instead of the JS-only submit.
 
-- `post_agreement_url` — accepted (`/search/`) or still rejected (bounced
-  back to `SENATE_HOME_URL`) with a *real* click this time?
-- `final_url` and `outcome` for the filing request that follows.
-- If still redirected/blocked even with a real click: this would be much
-  stronger evidence of an actual Lambda-origin block (the synthetic-event
-  confound above would be ruled out), and whether it looks like a hard
-  block (consistent across retries, matches Akamai's known block-page
-  shape) or something workaroundable (rate-limit-shaped, intermittent, or a
-  different failure mode entirely).
-- Date run and which AWS region/account the Lambda egress IP came from.
+### Attempt 6: confound ruled out — PASS
 
-That result is what unblocks #28's design decision (manual-only vs.
-headless-browser automation step) from "contingent, unverified" to settled.
+Rerun with the real-click fix. `post_agreement_url` was `.../search/` (the
+agreement genuinely accepted this time, not bounced back), and the
+subsequent filing request landed on `outcome: "cleared"` with `final_url`
+matching the requested filing URL exactly — the full result is in the
+**Result** section above. The synthetic-event confound from attempt 5 is
+now ruled out: a real click succeeds where the JS-only submit didn't,
+confirming attempts 1-4's "blocks" were this probe not yet replicating the
+real access flow, not evidence of anything Lambda-specific.
