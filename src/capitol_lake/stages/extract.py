@@ -16,6 +16,14 @@ OpenFIGI + EDGAR cascade (`ticker_resolve.resolve_ticker`, #39), after the
 extractor's own printed-symbol ticker; it is never called for a row that
 already has a ticker or isn't stock/ETF, and its absence (the default)
 leaves every row's ticker exactly as the extractor produced it.
+
+`llm_fallback` (optional, #41) is applied to every transaction before
+`resolve_ticker`, so a still-null `ticker`'s `asset_description`/`asset_type`
+can benefit from any field the fallback stage just recovered. It is a plain
+`Transaction -> Transaction` callable; a caller wires it to
+`llm_fallback.apply_text_fallback`/`apply_vision_fallback` with whatever
+eligible-field set and provider it chooses (see `llm_fallback` module docs).
+Its absence (the default) performs no fallback at all.
 """
 
 from __future__ import annotations
@@ -158,6 +166,7 @@ def extract_house_filing(
     *,
     bronze_key: str,
     resolve_ticker: Callable[[str, AssetType], str | None] | None = None,
+    llm_fallback: Callable[[Transaction], Transaction] | None = None,
 ) -> dict[str, Any]:
     """Route a House PTR to its extractor and serialize its rows to silver Parquet.
 
@@ -173,6 +182,13 @@ def extract_house_filing(
     (see module docstring); every other row's ticker is left exactly as the
     extractor produced it. Omitting it (the default) performs no resolution
     at all, e.g. for callers/tests with no OpenFIGI/EDGAR access.
+
+    `llm_fallback(transaction)`, when given, is called for every transaction
+    row before ticker resolution and must return the (possibly unchanged)
+    row to keep; the fallback stage (`stages.llm_fallback`, #41) is a no-op
+    for a transaction with nothing to recover, so this stays a plain
+    per-row map even when most rows pass through untouched. Omitting it (the
+    default) performs no fallback at all.
 
     Returns `{"kind": ..., "filings": {"key": ..., "bytes": ...},
     "transactions": {"key": ..., "bytes": ...}}`: one Hive-partitioned
@@ -194,6 +210,8 @@ def extract_house_filing(
 
     transaction_rows = []
     for transaction in extraction.transactions:
+        if llm_fallback is not None:
+            transaction = llm_fallback(transaction)
         row = transaction_row(transaction)
         if (
             row["ticker"] is None
