@@ -24,8 +24,12 @@ resource "aws_budgets_budget" "capitol_lake" {
   time_unit    = "MONTHLY"
 
   cost_filter {
-    name   = "TagKeyValue"
-    values = [format("user:Project$%s", var.budget_project_tag_value)]
+    name = "TagKeyValue"
+    # Reads the Project value straight off var.tags (common_tags from the
+    # root module) rather than a separate variable, so there's one place
+    # (ADR-0009) defining what "capitol-lake" spend means — this can't drift
+    # out of sync with the tag every other resource actually carries.
+    values = [format("user:Project$%s", var.tags["Project"])]
   }
 
   dynamic "notification" {

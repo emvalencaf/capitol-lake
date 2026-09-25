@@ -4,12 +4,6 @@ variable "budget_amount_usd" {
   default     = "5"
 }
 
-variable "budget_project_tag_value" {
-  description = "Value of the Project cost allocation tag the Budget filters on (must match common_tags.Project)."
-  type        = string
-  default     = "capitol-lake"
-}
-
 variable "alert_email" {
   description = "Email address subscribed to both the budget alerts and the staleness alarm's SNS topic."
   type        = string
@@ -31,7 +25,12 @@ variable "staleness_period_seconds" {
 }
 
 variable "tags" {
-  description = "Tags merged onto every resource this module creates (common_tags from the root module, per ADR-0009)."
+  description = <<-EOT
+    Tags merged onto every resource this module creates (common_tags from the
+    root module, per ADR-0009). Must include a "Project" key — the Budget's
+    cost filter reads it directly so the filtered tag value can't drift from
+    what every other resource is actually tagged with.
+  EOT
   type        = map(string)
   default     = {}
 }
