@@ -72,22 +72,64 @@ either way** — not because the observation was wrong, but because the
 comparison (cold Lambda request vs. warmed-up local session) wasn't
 apples-to-apples.
 
-`run_probe` (see `senate_akamai_probe.py`) now navigates to
-`SENATE_HOME_URL` first, in the same page, before requesting the filing —
-replicating what the local runs actually did — and records that warm-up
-navigation's own status as `home_status_code`. **Not yet rerun with this
-fix.** Next step: redeploy (`./scripts/deploy-senate-akamai-probe.sh up`)
-and `invoke` again, and record here:
+### Attempt 3: warmed-up session, `home_status_code` added
 
-- `home_status_code` and whether `SENATE_HOME_URL` itself renders normally
-  (ToS-agreement text, per #23's description) or is blocked outright — a
-  block there would be the harder, more decisive finding.
-- `final_url` and `outcome` for the filing request that follows, now that
-  the browser has a warmed-up session.
-- If still redirected/blocked after the warm-up: whether it looks like a
-  hard block (consistent across retries, matches Akamai's known block-page
-  shape) or something workaroundable (rate-limit-shaped, intermittent, or a
-  different failure mode entirely).
+`run_probe` was corrected to navigate to `SENATE_HOME_URL` first, in the
+same page, before requesting the filing. Result: `home_status_code: 200`
+(the homepage itself loads fine, not blocked), but the filing request still
+landed back on `final_url` `.../search/home/`, `outcome: "ambiguous"` —
+same shape as before. Still not apples-to-apples with the local runs: #23's
+successful probe *and* #35's real collection run both went through the
+site's own `prohibition_agreement` checkbox gate (a Django session
+requirement, independent of Akamai) before fetching anything — a bare visit
+to the homepage isn't the same as accepting that agreement.
+
+### Attempt 4: agreement accepted, still redirected — genuinely ambiguous
+
+`run_probe` was corrected again to find the `prohibition_agreement`
+checkbox, check it, and submit its form via JS (a plain Playwright
+`Locator.check()` hung for the full 30s timeout on the real deploy —
+see git history for that fix) before requesting the filing. Result:
+
+```json
+{
+  "filing_id": "b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f",
+  "status_code": 200,
+  "outcome": "ambiguous",
+  "final_url": "https://efdsearch.senate.gov/search/home/",
+  "home_status_code": 200,
+  "agreement_accepted": true
+}
+```
+
+`agreement_accepted: true` only confirms the checkbox was found and the JS
+submit call didn't throw — it does **not** confirm the site actually
+accepted the agreement server-side. This result can't yet distinguish two
+different failures:
+
+1. The agreement submission itself was rejected/ignored (landed back on
+   `SENATE_HOME_URL` immediately, before the filing was ever requested) —
+   would point at something wrong with the submission (stale CSRF token,
+   Akamai intervening on that specific POST, a markup assumption that's
+   wrong).
+2. The agreement succeeded (landed on `/search/`) but the *filing* request
+   afterward lost that session and bounced back on its own — would point at
+   a session/cookie-persistence issue specific to the filing request, a
+   genuinely new and more interesting finding.
+
+`run_probe` now also captures `post_agreement_url` (`page.url` right after
+the agreement form submits, before the filing is ever requested) to tell
+these apart — **not yet rerun with this fix.** Next step: redeploy
+(`./scripts/deploy-senate-akamai-probe.sh up`) and `invoke` again, and
+record here:
+
+- `post_agreement_url` — was the agreement itself accepted (`/search/`) or
+  rejected (bounced back to `SENATE_HOME_URL` immediately)?
+- `final_url` and `outcome` for the filing request that follows.
+- If still redirected/blocked: whether it looks like a hard block
+  (consistent across retries, matches Akamai's known block-page shape) or
+  something workaroundable (rate-limit-shaped, intermittent, or a different
+  failure mode entirely).
 - Date run and which AWS region/account the Lambda egress IP came from.
 
 That result is what unblocks #28's design decision (manual-only vs.

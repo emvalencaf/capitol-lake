@@ -101,6 +101,13 @@ class ProbeResult:
     login/agreement page) reads as an unremarkable 200 without this: compare
     `final_url` against the requested filing URL to tell "landed elsewhere"
     from "this really is what a cleared request returns".
+
+    `post_agreement_url` is `page.url` right after the agreement form
+    submits, *before* the filing is ever requested — it disambiguates two
+    otherwise-identical-looking failures: the agreement submission itself
+    landing back on `SENATE_HOME_URL` (the site rejected/ignored it) versus
+    it succeeding (landing on `/search/`) but the filing request afterward
+    losing that session and bouncing back to `SENATE_HOME_URL` on its own.
     """
 
     filing_id: str
@@ -110,6 +117,7 @@ class ProbeResult:
     html_excerpt: str
     home_status_code: int
     agreement_accepted: bool
+    post_agreement_url: str
 
 
 # The site's own Django-backed search gate (independent of Akamai): GET this
@@ -193,6 +201,8 @@ def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
                 page.wait_for_load_state("networkidle")
                 agreement_accepted = True
 
+            post_agreement_url = page.url
+
             response = page.goto(url, wait_until="networkidle")
             status_code = response.status if response is not None else 0
             final_url = page.url
@@ -209,4 +219,5 @@ def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
         html_excerpt=html[:2000],
         home_status_code=home_status_code,
         agreement_accepted=agreement_accepted,
+        post_agreement_url=post_agreement_url,
     )
