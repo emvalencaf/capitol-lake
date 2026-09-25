@@ -9,6 +9,21 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- Senate-Akamai Lambda-egress probe (#29, run and resolved — **result:
+  PASS**): `capitol_lake.probes.senate_akamai_probe` drives one real
+  headless-Playwright request (warm-up navigation, the site's own
+  `prohibition_agreement` gate accepted via a real click, then the target
+  filing) at a Senate eFD `/ptr/` filing and classifies the response as
+  `cleared`/`blocked_akamai`/`blocked_other`/`ambiguous`; run live from a
+  real AWS Lambda (`infra/probes/senate-akamai-probe/`, standalone
+  Terraform, since torn down) via
+  `docker/senate_akamai_probe.Dockerfile` and
+  `scripts/deploy-senate-akamai-probe.sh` (build/push/apply/invoke/destroy).
+  Confirmed a Lambda-origin request clears the Akamai bot/fingerprint check
+  the same way #23's local-network probe did, once the automation replicates
+  the real access flow — see `docs/research/senate-akamai-lambda-probe.md`
+  for the full attempts log and evidence. Unblocks #28's Senate collector
+  automation design decision.
 - CI/CD for `infra/` via GitHub Actions and OIDC (#46), per ADR-0009:
   `.github/workflows/infra-cicd.yml` runs `terraform plan` on pull requests
   touching `infra/**` and `terraform apply` on push to `master`, authenticating

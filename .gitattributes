@@ -1,0 +1,7 @@
+# Force LF regardless of a checkout's core.autocrlf: a shell script (or
+# Terraform, or Python) checked out with CRLF breaks at runtime (`#!/usr/bin/env
+# bash\r` -> "bash\r: No such file or directory", `set -o pipefail` -> "Illegal
+# option") even though it looks fine to a text editor.
+*.sh text eol=lf
+*.tf text eol=lf
+*.py text eol=lf
