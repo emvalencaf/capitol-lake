@@ -107,34 +107,95 @@ against fakes with no live network call and no MinIO; only
 real `boto3` S3 client — which only succeeds where the Akamai check passes
 (a plain `urllib` request does not; see above).
 
+## Orchestration: SQS chain and stage-to-stage handoff (#43)
+
+Per the shape #18 settled, stages are chained via SQS carrying only S3-key
+references (never document bytes): `stages/orchestration.py`'s
+`bronze_key_records_from_event` is the one place a handler unpacks its
+event, dispatching on shape — a plain `{"bronze_key": ...}` invocation
+(manual/RIE testing, every handler still accepts this), an SQS event (each
+record's `body` is `extract_queue_message`'s JSON, `{"bronze_key": ...}`),
+or an S3 event (each record's own `s3.object.key`, for the Senate side,
+which has no scheduled collector to send an SQS message on its behalf).
+Each `BronzeKeyRecord` also carries that record's SQS `messageId` (`None`
+for a plain or S3 record) so a handler can report a per-message failure
+without re-deriving which records came off SQS itself, even in a batch that
+mixes sources. `keys.py`'s `parse_bronze_key` reverses `bronze_key()` back
+into `chamber`/`year`/`doc_id`, shared by every stage that only receives a
+bronze key.
+
+`house_collect_handler.py` enqueues one SQS message per bronze key
+`collect_house` actually wrote this run (never a `noop` key) to
+`EXTRACT_QUEUE_URL`, left unset by default so the handler still runs
+standalone with no queue configured. `extract_handler.py` accepts a batch of
+SQS records (batch size 1 in production, per #43) and reports a per-message
+failure via `batchItemFailures` (`ReportBatchItemFailures`) rather than
+letting one filing's exception fail the whole batch, using each
+`BronzeKeyRecord.message_id` rather than every other record's raw shape; a
+plain or S3-event invocation still lets an exception raise, matching every
+other handler.
+
+Locally, ElasticMQ (`docker-compose.yml`'s `elasticmq` service, port 9324)
+emulates SQS — chosen over LocalStack since LocalStack's SQS coverage is
+Hobby-plan/non-commercial-only (`docs/research/free-tool-inventory.md`,
+#4), and ElasticMQ is a free, Apache-2.0, SQS-only complement to MinIO's S3
+emulation. `docker/elasticmq.conf` pre-creates the `extract-queue` queue on
+boot, matching MinIO's `minio-init` bucket-creation pattern. Bring both up
+alongside MinIO:
+
+```bash
+docker-compose up -d minio minio-init elasticmq
+```
+
+`infra/modules/lambda-stage` (Terraform, not yet wired into a root module —
+see ADR 0011) is the reserved-concurrency/DLQ-per-stage configuration #43's
+acceptance criteria calls for: one queue, one DLQ (14-day retention), and
+`reserved_concurrent_executions` (default 5) per stage; a stage's
+`queue_visibility_timeout_seconds` doubles as its retry backoff, set higher
+on `extract`'s instance than the default per ADR 0011 (its Lambda also
+performs ticker resolution and LLM fallback, so it gets the slower-backoff
+DLQ posture #43 asks for on that stage, not more retries).
+
 ## Extract stage
 
 `src/capitol_lake/stages/extract.py` is the third caller of the bronze
 contract's counterpart on the silver side. `extract_house_filing` takes a
 bronze PDF's bytes plus its `bronze_key`, parses `chamber`/`year`/`doc_id`
-back out of that key, routes to `digital_extract.extract_digital` or
-`scanned_extract.extract_scanned` via `house_collect.route_doc_id` (no
-manual classification), and serializes the resulting `Filing` and
-`Transaction` rows into two Hive-partitioned Parquet part files — one per
-silver table (`filings`, `transactions`), one part per `doc_id`
-(`silver_key`, ADR 0008). Every transaction row extracted is kept regardless
-of `asset_type`, with `asset_type` and the original `asset_description`
-always present; this stage only routes and serializes, it never filters a
-row out. Like every other stage here, the pure function never touches S3 —
-it returns each part file's key and bytes, and
+back out of that key (`keys.parse_bronze_key`), routes to
+`digital_extract.extract_digital` or `scanned_extract.extract_scanned` via
+`house_collect.route_doc_id` (no manual classification), and serializes the
+resulting `Filing` and `Transaction` rows into two Hive-partitioned Parquet
+part files — one per silver table (`filings`, `transactions`), one part per
+`doc_id` (`silver_key`, ADR 0008). Every transaction row extracted is kept
+regardless of `asset_type`, with `asset_type` and the original
+`asset_description` always present; this stage only routes and serializes,
+it never filters a row out. Like every other stage here, the pure function
+never touches S3 — it returns each part file's key and bytes, and
 `handlers/extract_handler.py` (real `boto3` client) reads the bronze PDF and
 writes both silver part files. It also raises `DocIdMismatchError` rather
 than write a row whose own `doc_id` disagrees with the bronze key it's
 partitioned under (the digital extractor reads `doc_id` from the PDF's own
 footer, independently of the bronze key).
 
-No `docker/extract.Dockerfile` or compose service yet: unlike the House and
-Senate collectors, `dnf install tesseract` isn't available on the AWS Lambda
-Python 3.12 base image's default repos, so packaging Tesseract into a
-container image for this stage needs a static binary or an EPEL-equivalent
-setup (ADR 0001), which is deferred rather than solved here. Exercise
-`extract_handler.py` directly (plain call, with real `boto3`/MinIO clients
-injected) instead of through the Lambda RIE until that's resolved.
+`docker/extract.Dockerfile` (ADR 0011) packages this stage: unlike every
+other stage's image, it builds from a plain Debian base
+(`python:3.12-slim`) rather than the AWS Lambda base image, since neither
+that image's nor plain `amazonlinux:2023`'s `dnf` repos carry a `tesseract`
+package at all. Tesseract installs the way ADR-0001 always intended — a
+plain `apt-get install tesseract-ocr`, the same package
+`.github/workflows/ci.yml` already installs — following AWS's documented
+"alternative base image" pattern: `awslambdaric` (the Lambda Runtime
+Interface Client) via `pip`, and `aws-lambda-rie` (the Runtime Interface
+Emulator, bundled automatically on AWS's own base images but not on a
+non-AWS one) downloaded separately, wired up by
+`docker/extract-entrypoint.sh`. Build and run it the same way as every
+other stage:
+
+```bash
+docker-compose up -d --build extract-stage
+curl -XPOST "http://localhost:9103/2015-03-31/functions/function/invocations" \
+  -d '{"bronze_key": "bronze/house/year=2024/20012345.pdf"}'
+```
 
 ## Running MinIO locally
 

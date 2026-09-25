@@ -28,14 +28,13 @@ Its absence (the default) performs no fallback at all.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from typing import Any
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from capitol_lake.keys import silver_key
+from capitol_lake.keys import parse_bronze_key, silver_key
 from capitol_lake.schema import AssetType, Filing, Transaction
 from capitol_lake.stages.digital_extract import extract_digital
 from capitol_lake.stages.house_collect import route_doc_id
@@ -46,9 +45,6 @@ FILINGS_TABLE = "filings"
 TRANSACTIONS_TABLE = "transactions"
 
 _EXTRACTORS = {"digital": extract_digital, "scanned": extract_scanned}
-
-# Reverses bronze_key()'s `bronze/<chamber>/year=<year>/<doc_id>.<ext>` layout.
-_BRONZE_KEY_RE = re.compile(r"^bronze/(?P<chamber>[^/]+)/year=(?P<year>\d+)/(?P<doc_id>[^./]+)\.")
 
 _FILING_SCHEMA = pa.schema(
     [
@@ -89,10 +85,6 @@ _TRANSACTION_SCHEMA = pa.schema(
 )
 
 
-class UnrecognizedBronzeKeyError(ValueError):
-    """A bronze key doesn't match the `bronze/<chamber>/year=<year>/<doc_id>.<ext>` layout."""
-
-
 class DocIdMismatchError(ValueError):
     """The extracted `Filing.doc_id` disagrees with the bronze key's own doc id.
 
@@ -104,13 +96,6 @@ class DocIdMismatchError(ValueError):
     disagrees with the doc id inside the row itself would be a silent,
     undetectable data-integrity bug, so this is raised instead.
     """
-
-
-def _parse_bronze_key(bronze_key: str) -> tuple[str, int, str]:
-    match = _BRONZE_KEY_RE.match(bronze_key)
-    if match is None:
-        raise UnrecognizedBronzeKeyError(f"not a bronze key: {bronze_key!r}")
-    return match.group("chamber"), int(match.group("year")), match.group("doc_id")
 
 
 def _filing_row(filing: Filing) -> dict[str, Any]:
@@ -198,7 +183,7 @@ def extract_house_filing(
     with the bronze key's own doc id, rather than silently writing a row
     under a partition path that disagrees with the doc id inside it.
     """
-    chamber, year, doc_id = _parse_bronze_key(bronze_key)
+    chamber, year, doc_id = parse_bronze_key(bronze_key)
     kind = route_doc_id(doc_id)
     extraction = _EXTRACTORS[kind](pdf_bytes, bronze_key=bronze_key)
 

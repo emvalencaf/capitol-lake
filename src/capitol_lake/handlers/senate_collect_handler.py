@@ -12,6 +12,16 @@ works where the Akamai check passes; see `docs/local-dev.md` for what's
 confirmed to clear it. Handlers stay thin by convention: they only translate
 the event shape and real clients into the pure function's arguments and are
 not unit-tested (see docs/local-dev.md); the pure function underneath is.
+
+Unlike `house_collect_handler.py`, this handler never enqueues an SQS
+message itself: per #18/#43's orchestration shape, House chains into
+extract via SQS because it's the one scheduled, automated collector, but
+Senate has no schedule to chain from. Once this handler's `write_bytes`
+lands a bronze object in S3 (whether invoked as a real Lambda or run
+locally), an S3 event notification on the bronze bucket (infra, not code)
+triggers the extract stage directly for that object — the same entry point
+a human's manual upload would use, so the chain doesn't care which path put
+the object there.
 """
 
 import json
