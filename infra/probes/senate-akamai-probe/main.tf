@@ -62,5 +62,12 @@ module "lambda" {
   handler_timeout_seconds = 120
   memory_mb               = 1024
 
+  # Unreserved (`-1`, the module's "unset" sentinel): this probe is invoked
+  # manually, once, so it doesn't need the main pipeline's reserved-
+  # concurrency isolation (#43) — and reserving any amount here can fail
+  # outright on a small/free-tier account, since AWS requires at least 10
+  # unreserved executions to remain account-wide after every reservation.
+  reserved_concurrent_executions = -1
+
   tags = var.tags
 }
