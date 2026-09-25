@@ -11,6 +11,17 @@ contingent on the answer. Run this once from a real Lambda invocation
 the result in `docs/research/senate-akamai-lambda-probe.md`, then tear the
 probe infra down — it has no ongoing purpose once the question is answered.
 
+`run_probe` first navigates to `SENATE_HOME_URL` before the target filing,
+in the *same* browser page/context — replicating what #23's and #35's real
+local runs actually did (both describe "navigating"/"a Selenium-established
+session" before fetching a filing, never a single cold request straight at
+a filing URL). A first Lambda-origin attempt that skipped this warm-up
+landed on `/search/home/` instead of the filing — the same URL #23's own
+*successful* local run first landed on too, before that run's session had
+been used for anything else — so a single cold request isn't actually
+evidence of a Lambda-specific block; it may just be this site's ordinary
+behavior for a browser that hasn't loaded anything yet.
+
 Only `classify_probe_result` is a pure function and unit-tested; `run_probe`
 drives a real Playwright browser against the live site and is exercised by
 hand, the same convention `handlers/*_handler.py` follows for real network
@@ -25,6 +36,11 @@ from typing import Literal
 # Confirmed live (#23, docs/local-dev.md): a cleared request lands on the
 # filing's own print view, titled exactly this.
 CLEARED_TITLE_MARKER = "eFD: Print Periodic Transaction Report"
+
+# #23's own probe target — visited first (see module docstring) so the
+# browser has a normal navigation history/session before requesting a
+# filing, same as every real local run this repo has on record.
+SENATE_HOME_URL = "https://efdsearch.senate.gov/search/home/"
 
 # Akamai's own block page (Bot Manager / Kona Site Defender default) always
 # carries one of these — a "Reference #<digits>.<hex>" incident id and/or the
@@ -82,10 +98,18 @@ class ProbeResult:
     outcome: ProbeOutcome
     final_url: str
     html_excerpt: str
+    home_status_code: int
 
 
 def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
     """Drive a real headless-Chromium request at one `/ptr/` filing via Playwright.
+
+    First navigates to `SENATE_HOME_URL` in the same page, then to the
+    filing — see the module docstring for why a single cold request isn't a
+    fair replay of #23/#35's local runs. `home_status_code` is that warm-up
+    navigation's own status, recorded because a block on `SENATE_HOME_URL`
+    itself (e.g. a real 403 there) is a materially different, harder finding
+    than the filing request alone landing back on it.
 
     Requires the `playwright` package and its Chromium browser download,
     both installed by `docker/senate_akamai_probe.Dockerfile` — not a
@@ -122,6 +146,10 @@ def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
         )
         try:
             page = browser.new_page()
+
+            home_response = page.goto(SENATE_HOME_URL, wait_until="networkidle")
+            home_status_code = home_response.status if home_response is not None else 0
+
             response = page.goto(url, wait_until="networkidle")
             status_code = response.status if response is not None else 0
             final_url = page.url
@@ -136,4 +164,5 @@ def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
         outcome=outcome,
         final_url=final_url,
         html_excerpt=html[:2000],
+        home_status_code=home_status_code,
     )

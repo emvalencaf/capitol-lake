@@ -26,23 +26,22 @@ down; this is a throwaway diagnostic, not infra kept running.
 
 ## Result
 
-**2026-09-25, `us-east-1` — FAIL: the Lambda-origin request does not clear
-the check the way #23's local-network probe did.** #29 itself scopes this
-ticket as "stays open and unclaimed here until a future
-implementation/cloud-lift effort picks it up"; the human operating this repo
-went ahead and ran the probe anyway against a real AWS account, working
-through a chain of deploy-time bugs along the way (Playwright headless-shell
-binary vs. full Chromium, `PLAYWRIGHT_BROWSERS_PATH` resolving under the
-wrong `$HOME` at Lambda runtime, missing
-`--no-sandbox`/`--disable-gpu`/`--disable-dev-shm-usage`/`--single-process`
-launch flags — see git history on `feat/senate-lambda-akamai-probe` for each
-fix). Filing probed: `b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f`, requested URL
-`https://efdsearch.senate.gov/search/view/ptr/b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f/`.
+**Superseded once, see below — two cold-request runs on 2026-09-25 turned
+out not to be meaningful evidence, and `run_probe` was corrected as a
+result.** #29 itself scopes this ticket as "stays open and unclaimed here
+until a future implementation/cloud-lift effort picks it up"; the human
+operating this repo went ahead and ran the probe anyway against a real AWS
+account (`us-east-1`), working through a chain of deploy-time bugs along the
+way (Playwright headless-shell binary vs. full Chromium,
+`PLAYWRIGHT_BROWSERS_PATH` resolving under the wrong `$HOME` at Lambda
+runtime, missing `--no-sandbox`/`--disable-gpu`/`--disable-dev-shm-usage`/
+`--single-process` launch flags — see git history on
+`feat/senate-lambda-akamai-probe` for each fix). Filing probed:
+`b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f`.
 
-First attempt (predates `final_url`, `status_code` 200, `outcome`
-`"ambiguous"`, page titled `eFD: Home`) was genuinely inconclusive: a 200
-that isn't the filing page doesn't by itself prove a redirect happened.
-Rerun with `final_url` added settled it:
+Both attempts (the first without `final_url`, the second with it) landed on
+`final_url` `https://efdsearch.senate.gov/search/home/` instead of the
+filing:
 
 ```json
 {
@@ -54,39 +53,42 @@ Rerun with `final_url` added settled it:
 }
 ```
 
-`final_url` (`.../search/home/`) differs from the requested filing URL —
-**a redirect happened**. This is the decisive fact: `senate_collect.py`'s own
-confirmed-live comment (from #23) says a *cleared* request to this exact
-print-view URL pattern needs no session/agreement cookie and returns the
-filing's HTML directly, no redirect. #23's local-network probe got the
-filing; this Lambda-origin probe got bounced to the site's homepage instead.
+**This was initially (wrongly) read as likely evidence of a Lambda-specific
+bot/fingerprint soft-block.** Re-reading #23's own resolution comment
+corrected that: #23's *successful* local probe also first landed on
+`https://efdsearch.senate.gov/search/home/`, titled `eFD: Home` — the exact
+same URL and title this Lambda probe got. #23's script then went on to use
+that same browser session for further navigation; #35's second comment
+similarly describes fetching real filings via "that Selenium-established
+session," not a single cold request straight at a filing URL. Every real,
+confirmed-successful local run this repo has on record involved navigating
+the site first, in the same browser context, before ever requesting a
+filing — this probe's first two runs never did that; they hit the filing URL
+cold, in a fresh browser page with no prior navigation. Landing on
+`/search/home/` may simply be this site's ordinary behavior for *any*
+browser (local or Lambda) that hasn't loaded anything yet, not a
+Lambda-specific block at all. **These two runs are retracted as evidence
+either way** — not because the observation was wrong, but because the
+comparison (cold Lambda request vs. warmed-up local session) wasn't
+apples-to-apples.
 
-**Interpretation** (`classify_probe_result` still correctly reports
-`"ambiguous"` — it only reads `status_code`/`html`, not `final_url`; this
-call is a human judgment, per #29's own ask): most likely a **bot/fingerprint
-soft-block**, not a session/agreement gate. Redirect-to-a-garden-page
-(rather than an explicit 403 "Access Denied") is a standard Akamai Bot
-Manager mitigation action, and #17's original note specifically flagged
-"cloud IP may hit the same Akamai 403" as the open risk this ticket exists
-to test — a redirect is a different *shape* of the same category of
-response, not evidence against it. Residual uncertainty: this wasn't
-re-verified against a fresh, contemporaneous local-network control (i.e.
-confirming #23's exact result still holds *today*, not just in #23's own
-run), so a site-side behavior change independent of Lambda vs. local-network
-can't be fully ruled out.
+`run_probe` (see `senate_akamai_probe.py`) now navigates to
+`SENATE_HOME_URL` first, in the same page, before requesting the filing —
+replicating what the local runs actually did — and records that warm-up
+navigation's own status as `home_status_code`. **Not yet rerun with this
+fix.** Next step: redeploy (`./scripts/deploy-senate-akamai-probe.sh up`)
+and `invoke` again, and record here:
 
-**Hard block or workaroundable?** Unknown from a single run — this result
-answers "does it clear the same way" (no), not "is it beatable with more
-effort." Worth trying before writing off Playwright-in-Lambda entirely:
-driving the full agreement flow (visit `/search/home/`, accept the terms,
-carry the resulting session cookie into the filing request) the way a real
-browser user would, since #23's "no cookie required" finding was itself
-conditional on already clearing Akamai — an unclearing Lambda IP might
-behave differently with a real session versus none. Until tried, treat this
-as inconclusive-toward-hard-block, not confirmed-hard-block.
+- `home_status_code` and whether `SENATE_HOME_URL` itself renders normally
+  (ToS-agreement text, per #23's description) or is blocked outright — a
+  block there would be the harder, more decisive finding.
+- `final_url` and `outcome` for the filing request that follows, now that
+  the browser has a warmed-up session.
+- If still redirected/blocked after the warm-up: whether it looks like a
+  hard block (consistent across retries, matches Akamai's known block-page
+  shape) or something workaroundable (rate-limit-shaped, intermittent, or a
+  different failure mode entirely).
+- Date run and which AWS region/account the Lambda egress IP came from.
 
-**Feeds into #28**: as of this result, a headless-browser collection step
-inside the cloud pipeline is **not validated as viable** — #18's original
-manual-only posture stands unless/until either the cookie-flow workaround
-above is tried and clears, or the block is otherwise shown to be
-inconsistent/workaroundable rather than a hard per-IP-range block.
+That result is what unblocks #28's design decision (manual-only vs.
+headless-browser automation step) from "contingent, unverified" to settled.
