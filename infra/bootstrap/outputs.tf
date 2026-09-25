@@ -6,3 +6,8 @@ output "state_bucket_name" {
 output "state_bucket_arn" {
   value = aws_s3_bucket.state.arn
 }
+
+output "github_actions_role_arn" {
+  description = "Feed this into the repo's AWS_ROLE_ARN Actions variable (#46) — not a secret, an IAM role ARN grants no access on its own without the OIDC trust condition."
+  value       = aws_iam_role.github_actions_terraform.arn
+}

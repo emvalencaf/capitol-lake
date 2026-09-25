@@ -9,6 +9,16 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- CI/CD for `infra/` via GitHub Actions and OIDC (#46), per ADR-0009:
+  `.github/workflows/infra-cicd.yml` runs `terraform plan` on pull requests
+  touching `infra/**` and `terraform apply` on push to `master`, authenticating
+  to AWS through a federated OIDC role — no long-lived access keys stored as
+  repo secrets. `apply` runs through a `production` GitHub Environment
+  (required-reviewer approval gate, configured by hand in repo settings).
+  `infra/bootstrap` now also provisions the GitHub OIDC provider and the one
+  IAM role both jobs assume, scoped by resource-name prefix/fixed name to
+  just the resource types the main stack manages, not
+  Administrator/PowerUserAccess.
 - FinOps Terraform module + staleness health check (#45), per ADR-0010:
   `infra/modules/finops` defines an AWS Budget filtered to the
   `Project=capitol-lake` cost allocation tag (not account-wide), alerting at
