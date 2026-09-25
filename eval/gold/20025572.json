@@ -1,0 +1,21 @@
+{
+  "doc_id": "20025572",
+  "kind": "digital",
+  "year": 2024,
+  "transactions": [
+    {
+      "owner": "self",
+      "transaction_type": "purchase",
+      "asset_type": "bond",
+      "asset_description": "US Treasury Bill",
+      "transaction_date": "2024-08-02",
+      "notification_date": "2024-08-02",
+      "value_min": 100001,
+      "value_max": 250000,
+      "filing_status": "New",
+      "sub_owner": null,
+      "description": null,
+      "line_no": 1
+    }
+  ]
+}

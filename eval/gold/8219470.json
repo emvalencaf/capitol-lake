@@ -1,0 +1,21 @@
+{
+  "doc_id": "8219470",
+  "kind": "scanned",
+  "year": 2023,
+  "transactions": [
+    {
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "other",
+      "asset_description": "Synchrony Bank 4.9%",
+      "transaction_date": "2023-03-23",
+      "notification_date": null,
+      "value_min": 100001,
+      "value_max": 250000,
+      "line_no": 1,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}

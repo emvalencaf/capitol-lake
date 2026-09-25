@@ -118,7 +118,7 @@ def _filing_row(filing: Filing) -> dict[str, Any]:
     }
 
 
-def _transaction_row(transaction: Transaction) -> dict[str, Any]:
+def transaction_row(transaction: Transaction) -> dict[str, Any]:
     value_range = transaction.value_range
     return {
         "doc_id": transaction.doc_id,
@@ -194,7 +194,7 @@ def extract_house_filing(
 
     transaction_rows = []
     for transaction in extraction.transactions:
-        row = _transaction_row(transaction)
+        row = transaction_row(transaction)
         if (
             row["ticker"] is None
             and resolve_ticker is not None

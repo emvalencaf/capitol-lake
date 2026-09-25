@@ -1,0 +1,21 @@
+{
+  "doc_id": "20022428",
+  "kind": "digital",
+  "year": 2023,
+  "transactions": [
+    {
+      "owner": "self",
+      "transaction_type": "purchase",
+      "asset_type": "other",
+      "asset_description": "FT UNIT 10479 PFD INCOME PORTFOLIO SER 114",
+      "transaction_date": "2023-02-06",
+      "notification_date": "2023-02-13",
+      "value_min": 15001,
+      "value_max": 50000,
+      "filing_status": "New",
+      "sub_owner": "Stephens Advantage Account",
+      "description": "FT UNIT 10479 PFD",
+      "line_no": 1
+    }
+  ]
+}

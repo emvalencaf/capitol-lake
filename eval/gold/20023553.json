@@ -1,0 +1,35 @@
+{
+  "doc_id": "20023553",
+  "kind": "digital",
+  "year": 2023,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "self",
+      "transaction_type": "purchase",
+      "asset_type": "bond",
+      "asset_description": "3 Month T bond",
+      "transaction_date": "2023-08-17",
+      "value_min": 100001,
+      "value_max": 250000,
+      "notification_date": "2023-08-17",
+      "filing_status": "New",
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "self",
+      "transaction_type": "purchase",
+      "asset_type": "bond",
+      "asset_description": "6 Month Bond",
+      "transaction_date": "2023-08-17",
+      "value_min": 100001,
+      "value_max": 250000,
+      "notification_date": "2023-08-17",
+      "filing_status": "New",
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "doc_id": "20022574",
+  "kind": "digital",
+  "year": 2023,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "spouse",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Synovus Financial Corp. (SNV)",
+      "transaction_date": "2023-02-06",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2023-03-14",
+      "filing_status": "New",
+      "sub_owner": "STOCK PLAN",
+      "description": "Employee stock plan distribution."
+    },
+    {
+      "line_no": 2,
+      "owner": "spouse",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Synovus Financial Corp. (SNV)",
+      "transaction_date": "2023-02-17",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2023-03-14",
+      "filing_status": "New",
+      "sub_owner": "STOCK PLAN",
+      "description": "Employee stock plan distribution."
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "doc_id": "20023930",
+  "kind": "digital",
+  "year": 2023,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "bond",
+      "asset_description": "New York NY City Transitional Fin 5.00% Due Nov 1, 2027",
+      "transaction_date": "2023-10-16",
+      "value_min": 15001,
+      "value_max": 50000,
+      "notification_date": "2023-10-16",
+      "filing_status": "New",
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "bond",
+      "asset_description": "Spring TX Isd 4% Go Utx Due 08/15/31",
+      "transaction_date": "2023-10-20",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2023-10-20",
+      "filing_status": "New",
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}
