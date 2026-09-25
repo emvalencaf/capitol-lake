@@ -15,6 +15,14 @@
 
 locals {
   stage_names = ["house-collect", "senate-collect", "extract"]
+
+  # Chamber override per stage (ADR-0010): only house-collect/senate-collect
+  # are chamber-specific; extract processes both, so it keeps var.tags'
+  # Chamber default ("n/a") rather than picking one.
+  stage_chamber = {
+    "house-collect"  = "house"
+    "senate-collect" = "senate"
+  }
 }
 
 resource "aws_ecr_repository" "this" {
@@ -27,7 +35,7 @@ resource "aws_ecr_repository" "this" {
     scan_on_push = true
   }
 
-  tags = merge(var.tags, { Stage = each.value })
+  tags = merge(var.tags, { Stage = each.value }, contains(keys(local.stage_chamber), each.value) ? { Chamber = local.stage_chamber[each.value] } : {})
 }
 
 data "aws_iam_policy_document" "lambda_assume_role" {
@@ -46,7 +54,7 @@ resource "aws_iam_role" "this" {
 
   name               = "capitol-lake-${each.value}-role"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
-  tags               = merge(var.tags, { Stage = each.value })
+  tags               = merge(var.tags, { Stage = each.value }, contains(keys(local.stage_chamber), each.value) ? { Chamber = local.stage_chamber[each.value] } : {})
 }
 
 resource "aws_iam_role_policy_attachment" "logs" {
@@ -189,7 +197,7 @@ module "house_collect" {
     EXTRACT_QUEUE_URL = module.extract.queue_url
   }
 
-  tags = merge(var.tags, { Stage = "house-collect" })
+  tags = merge(var.tags, { Stage = "house-collect", Chamber = "house" })
 }
 
 resource "aws_iam_role_policy" "house_collect_sqs" {
@@ -219,5 +227,5 @@ module "senate_collect" {
     BRONZE_BUCKET = var.bronze_bucket_name
   }
 
-  tags = merge(var.tags, { Stage = "senate-collect" })
+  tags = merge(var.tags, { Stage = "senate-collect", Chamber = "senate" })
 }

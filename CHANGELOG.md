@@ -9,6 +9,25 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- FinOps Terraform module + staleness health check (#45), per ADR-0010:
+  `infra/modules/finops` defines an AWS Budget filtered to the
+  `Project=capitol-lake` cost allocation tag (not account-wide), alerting at
+  50%/80%/100% of actual spend plus a forecasted->100% threshold, all through
+  a dedicated `capitol-lake-budget-alerts` SNS topic with an email
+  subscription (`var.finops_alert_email`, no default). The same topic backs
+  a `aws_cloudwatch_metric_alarm` dead-man's-switch on `house-collect`'s
+  `Invocations - Errors` metric math: two consecutive periods of
+  `var.house_schedule_period_seconds` (default 86400s, matching
+  `rate(1 day)`) with zero successful runs, `treat_missing_data = "breaching"`
+  so a Lambda that stops being invoked entirely still alarms. `common_tags`
+  gained `Environment` (`"production"`, ADR-0009's single-environment
+  scoping) and `Chamber` (default `"n/a"`), with `infra/modules/pipeline`
+  overriding `Chamber` to `"house"`/`"senate"` on the two chamber-specific
+  stage resources. `terraform validate`/`fmt` are clean and `terraform plan`
+  succeeds with 0 errors against a local backend and mocked AWS credentials
+  (real S3 backend/account access is out of scope, per #44's precedent).
+  Activating the `Project` cost allocation tag in the Billing Console remains
+  a manual, one-time step outside Terraform's reach (ADR-0010's Consequences).
 - Terraform core infra (#44), wiring `infra/modules/lambda-stage` (#43) into
   a deployable root stack per ADR-0009/ADR-0011: `infra/bootstrap` (one-time,
   local-state S3 state-bucket bootstrap), `infra/modules/storage`
