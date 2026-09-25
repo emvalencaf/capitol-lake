@@ -17,6 +17,12 @@ provider "aws" {
 resource "aws_ecr_repository" "probe" {
   name                 = "capitol-lake-senate-akamai-probe"
   image_tag_mutability = "MUTABLE"
+  # This repo only ever holds throwaway probe images pushed under the
+  # mutable :latest tag (deploy-senate-akamai-probe.sh's `up`, one per
+  # rebuild) — nothing worth keeping once the probe is torn down, and a
+  # single `up`/`invoke` iteration cycle leaves images behind that make a
+  # plain `terraform destroy` fail with "repository not empty" otherwise.
+  force_delete = true
 
   image_scanning_configuration {
     scan_on_push = true
