@@ -66,11 +66,21 @@ def classify_probe_result(status_code: int, html: str) -> ProbeOutcome:
 
 @dataclass(frozen=True)
 class ProbeResult:
-    """One probe run's outcome, in the shape recorded in the research doc."""
+    """One probe run's outcome, in the shape recorded in the research doc.
+
+    `final_url` is `page.url` after `goto` settles — Playwright follows
+    redirects transparently, so `status_code` alone is the *final* response's
+    status and doesn't reveal that a redirect happened at all. A block or
+    gate shaped as a redirect (e.g. to the site's own homepage or a
+    login/agreement page) reads as an unremarkable 200 without this: compare
+    `final_url` against the requested filing URL to tell "landed elsewhere"
+    from "this really is what a cleared request returns".
+    """
 
     filing_id: str
     status_code: int
     outcome: ProbeOutcome
+    final_url: str
     html_excerpt: str
 
 
@@ -114,6 +124,7 @@ def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
             page = browser.new_page()
             response = page.goto(url, wait_until="networkidle")
             status_code = response.status if response is not None else 0
+            final_url = page.url
             html = page.content()
         finally:
             browser.close()
@@ -123,5 +134,6 @@ def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
         filing_id=filing_id,
         status_code=status_code,
         outcome=outcome,
+        final_url=final_url,
         html_excerpt=html[:2000],
     )

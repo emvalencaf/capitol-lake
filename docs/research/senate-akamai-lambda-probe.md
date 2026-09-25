@@ -26,12 +26,47 @@ down; this is a throwaway diagnostic, not infra kept running.
 
 ## Result
 
-**Not yet run.** This ticket (#29) is explicitly out of this map's
-implementation scope ("stays open and unclaimed here until a future
-implementation/cloud-lift effort picks it up") — only the probe's code and
-standalone infra were built here, per that scoping. A future session running
-`infra/probes/senate-akamai-probe/` should record here:
+**2026-09-25, preliminary — inconclusive, needs a rerun.** #29 itself scopes
+this ticket as "stays open and unclaimed here until a future
+implementation/cloud-lift effort picks it up"; the human operating this repo
+went ahead and ran the probe anyway against a real AWS account
+(`us-east-1`), working through a chain of deploy-time bugs along the way
+(Playwright headless-shell binary vs. full Chromium, `PLAYWRIGHT_BROWSERS_PATH`
+resolving under the wrong `$HOME` at Lambda runtime, missing
+`--no-sandbox`/`--disable-gpu`/`--disable-dev-shm-usage`/`--single-process`
+launch flags — see git history on `feat/senate-lambda-akamai-probe` for each
+fix). Filing probed: `b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f`.
 
+Raw result:
+
+```json
+{
+  "filing_id": "b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f",
+  "status_code": 200,
+  "outcome": "ambiguous",
+  "html_excerpt": "<title>eFD: Home</title> ..."
+}
+```
+
+`status_code` is 200 (not the classic Akamai 403 confirmed live in #17/#23),
+but the page title is **`eFD: Home`**, not
+`senate_collect.py`'s confirmed-live cleared marker
+(`"eFD: Print Periodic Transaction Report"`) — the request did not land on
+the filing itself. `classify_probe_result` correctly calls this
+`"ambiguous"` rather than guessing: a 200 that isn't the filing page could
+mean an Akamai soft-block shaped as a redirect to the homepage (a different
+shape than the hard 403 block #17/#23 saw, but still a block), *or* some
+other non-Akamai redirect/gate unrelated to bot detection. This run's
+`ProbeResult` predates the `final_url` field (added right after, see
+`senate_akamai_probe.py`), so there's no direct proof a redirect actually
+happened rather than the URL itself just serving that content — that's
+exactly the missing signal a rerun now captures.
+
+**Not yet settled.** Next step: rerun with the current probe code (`git pull`,
+`./scripts/deploy-senate-akamai-probe.sh up` to redeploy, then `invoke` again
+against the same or a fresh filing id) and record here:
+
+- `final_url` — confirms whether a redirect happened and to where.
 - Outcome (`cleared` / `blocked_akamai` / `blocked_other` / `ambiguous`) and
   HTTP status code.
 - If blocked: whether it looks like a hard block (consistent across retries,
