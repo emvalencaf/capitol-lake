@@ -18,7 +18,8 @@ heading when `development` is released to `master`.
   `docker/senate_akamai_probe.Dockerfile` (unverified — see its header) let
   a future session actually run it once and record the result in
   `docs/research/senate-akamai-lambda-probe.md`, which #28's automation
-  design is contingent on.
+  design is contingent on. `scripts/deploy-senate-akamai-probe.sh` wraps
+  the build/push/apply/invoke/destroy sequence for that future run.
 - CI/CD for `infra/` via GitHub Actions and OIDC (#46), per ADR-0009:
   `.github/workflows/infra-cicd.yml` runs `terraform plan` on pull requests
   touching `infra/**` and `terraform apply` on push to `master`, authenticating

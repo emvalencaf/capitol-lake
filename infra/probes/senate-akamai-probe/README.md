@@ -19,11 +19,28 @@ anything. Stand it up, invoke it once, record the result, tear it down.
 
 ## Steps
 
+`scripts/deploy-senate-akamai-probe.sh` (repo root) automates all of the
+below — build, push, apply, invoke, and destroy:
+
+```bash
+scripts/deploy-senate-akamai-probe.sh up                  # build, push, apply
+scripts/deploy-senate-akamai-probe.sh invoke <filing-id>   # invoke once, print the result
+scripts/deploy-senate-akamai-probe.sh down                 # terraform destroy
+```
+
+Equivalent manual steps, if you'd rather run each command yourself:
+
 ```bash
 # From the repo root.
 cd infra/probes/senate-akamai-probe
 terraform init
-terraform apply   # creates the ECR repo, IAM role, and Lambda (image not yet pushed)
+
+# Create the ECR repo (and IAM role) only — target-only, since the Lambda
+# resource can't be created yet: it points at an image that doesn't exist
+# in ECR until the next step pushes one. image_uri has no default, so a
+# placeholder value satisfies Terraform's variable validation without
+# being used by the targeted resource.
+terraform apply -target=aws_ecr_repository.probe -var="image_uri=pending"
 
 # Build and push the probe image (docker/senate_akamai_probe.Dockerfile is
 # UNVERIFIED — see its header comment; confirm the build succeeds before
@@ -34,8 +51,7 @@ docker build -f docker/senate_akamai_probe.Dockerfile -t "$REPO_URL:latest" .
 aws ecr get-login-password | docker login --username AWS --password-stdin "${REPO_URL%%/*}"
 docker push "$REPO_URL:latest"
 
-# Point the Lambda at the pushed image (image_uri only resolves once the
-# tag exists in ECR).
+# Now the image exists in ECR: apply the full stack, including the Lambda.
 cd infra/probes/senate-akamai-probe
 terraform apply -var="image_uri=${REPO_URL}:latest"
 
@@ -48,10 +64,11 @@ aws lambda invoke --function-name "$FUNCTION_NAME" \
 cat out.json
 ```
 
-`out.json` is `capitol_lake.probes.senate_akamai_probe.ProbeResult` as JSON:
-`filing_id`, `status_code`, `outcome` (`"cleared"`, `"blocked_akamai"`,
-`"blocked_other"`, or `"ambiguous"`), and `html_excerpt` (first 2000 chars,
-for a human to eyeball if `outcome` is `"ambiguous"` or unexpected).
+`out.json` (or the script's `invoke` output) is
+`capitol_lake.probes.senate_akamai_probe.ProbeResult` as JSON: `filing_id`,
+`status_code`, `outcome` (`"cleared"`, `"blocked_akamai"`, `"blocked_other"`,
+or `"ambiguous"`), and `html_excerpt` (first 2000 chars, for a human to
+eyeball if `outcome` is `"ambiguous"` or unexpected).
 
 Record the result in
 `docs/research/senate-akamai-lambda-probe.md`, which #28's resolution
@@ -60,6 +77,8 @@ depends on.
 ## Tear down
 
 ```bash
+scripts/deploy-senate-akamai-probe.sh down
+# or, equivalently:
 terraform destroy
 ```
 
