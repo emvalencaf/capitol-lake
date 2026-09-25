@@ -22,6 +22,16 @@ been used for anything else — so a single cold request isn't actually
 evidence of a Lambda-specific block; it may just be this site's ordinary
 behavior for a browser that hasn't loaded anything yet.
 
+A second, warmed-up run (visiting `SENATE_HOME_URL` before the filing, still
+one navigation each) *also* landed back on `/search/home/`. The site itself
+gates its Django-backed search behind a `prohibition_agreement` checkbox on
+that page — `GET /search/home/` for a CSRF cookie, then
+`POST prohibition_agreement=1` to the same URL, which redirects to `/search/`
+with the session's `search_agreement` flag set — a requirement independent
+of Akamai's bot/fingerprint check. `run_probe` now also checks that checkbox
+and submits the form before requesting the filing, matching the site's
+actual access flow rather than assuming a bare page load is enough.
+
 Only `classify_probe_result` is a pure function and unit-tested; `run_probe`
 drives a real Playwright browser against the live site and is exercised by
 hand, the same convention `handlers/*_handler.py` follows for real network
@@ -99,17 +109,30 @@ class ProbeResult:
     final_url: str
     html_excerpt: str
     home_status_code: int
+    agreement_accepted: bool
+
+
+# The site's own Django-backed search gate (independent of Akamai): GET this
+# page for a CSRF cookie, check this box, submit — the response sets the
+# session's search_agreement flag, redirecting to /search/. Confirmed field
+# name via public prior-art scrapers of this exact site (not guessed).
+_AGREEMENT_CHECKBOX_SELECTOR = 'input[name="prohibition_agreement"]'
 
 
 def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
     """Drive a real headless-Chromium request at one `/ptr/` filing via Playwright.
 
-    First navigates to `SENATE_HOME_URL` in the same page, then to the
-    filing — see the module docstring for why a single cold request isn't a
-    fair replay of #23/#35's local runs. `home_status_code` is that warm-up
-    navigation's own status, recorded because a block on `SENATE_HOME_URL`
-    itself (e.g. a real 403 there) is a materially different, harder finding
-    than the filing request alone landing back on it.
+    Navigates to `SENATE_HOME_URL`, accepts the site's own
+    `prohibition_agreement` checkbox gate, then requests the filing — all in
+    the same page/session, replicating what #23/#35's local runs actually
+    did rather than a single cold request (see the module docstring).
+    `home_status_code` is the warm-up navigation's own status (a block there
+    is a materially harder finding than the filing request alone landing
+    back on it); `agreement_accepted` records whether the checkbox was found
+    and submitted at all — `False` means the flow itself didn't work as
+    expected (site markup changed, or the interaction was blocked/prevented
+    some other way), which is itself worth knowing before trusting
+    `outcome`.
 
     Requires the `playwright` package and its Chromium browser download,
     both installed by `docker/senate_akamai_probe.Dockerfile` — not a
@@ -150,6 +173,14 @@ def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
             home_response = page.goto(SENATE_HOME_URL, wait_until="networkidle")
             home_status_code = home_response.status if home_response is not None else 0
 
+            checkbox = page.locator(_AGREEMENT_CHECKBOX_SELECTOR)
+            agreement_accepted = False
+            if checkbox.count() > 0:
+                checkbox.check()
+                with page.expect_navigation(wait_until="networkidle"):
+                    checkbox.evaluate("el => el.form.submit()")
+                agreement_accepted = True
+
             response = page.goto(url, wait_until="networkidle")
             status_code = response.status if response is not None else 0
             final_url = page.url
@@ -165,4 +196,5 @@ def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
         final_url=final_url,
         html_excerpt=html[:2000],
         home_status_code=home_status_code,
+        agreement_accepted=agreement_accepted,
     )
