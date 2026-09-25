@@ -122,6 +122,11 @@ uv run scripts/run_eval.py --json   # raw {by_filing, by_kind, overall} scores
 A single filing whose extractor raises (rather than returning rows) is
 scored as a total miss on every gold field for that filing — not a crash
 of the whole report — and listed under "Extraction errors" in the output.
+When enough of a set's filings fail extraction to meaningfully dilute its
+column, the report prints a `NOTE:` line directly under the score table
+naming how many failed and pointing at the reason, rather than leaving a
+diluted-but-plausible-looking number to be misread as a real field-accuracy
+score.
 
 ## Findings from the first run (2026-09-24)
 

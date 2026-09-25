@@ -63,41 +63,54 @@ def _extract_safe(doc_id: str, year: int) -> tuple[list[dict], str | None]:
         return [], f"{type(exc).__name__}: {exc}"
 
 
-def _check_determinism(doc_id: str, year: int) -> bool | None:
-    """Two extraction runs of the same bytes must produce identical rows.
+def load_gold_set() -> list[dict]:
+    """Load every gold file plus its extraction outcome, once each.
 
-    Returns `None` (not applicable) when the filing doesn't extract at all,
-    rather than counting a pre-existing extraction failure as a determinism
-    failure too.
+    Each item carries `doc_id`, `kind`, `year`, `gold_transactions`,
+    `predicted_transactions` and `extraction_error` (`None` on success) —
+    the single source both scoring and the determinism check read from, so
+    neither re-globs nor re-parses `eval/gold/*.json` on its own.
     """
-    first, error = _extract_safe(doc_id, year)
-    if error is not None:
-        return None
-    second, _ = _extract_safe(doc_id, year)
-    return first == second
-
-
-def load_gold_filings() -> tuple[list[dict], dict[str, str]]:
     filings = []
-    extraction_errors: dict[str, str] = {}
     for path in sorted(GOLD_DIR.glob("*.json")):
         gold = json.loads(path.read_text())
         predicted, error = _extract_safe(gold["doc_id"], gold["year"])
-        if error is not None:
-            extraction_errors[gold["doc_id"]] = error
         filings.append(
             {
                 "doc_id": gold["doc_id"],
                 "kind": gold["kind"],
+                "year": gold["year"],
                 "gold_transactions": [transaction_row_for_eval(t) for t in gold["transactions"]],
                 "predicted_transactions": predicted,
+                "extraction_error": error,
             }
         )
-    return filings, extraction_errors
+    return filings
 
 
-def _print_report(report: dict) -> None:
+def check_determinism(filing: dict) -> bool | None:
+    """Two extraction runs of the same bytes must produce identical rows.
+
+    Returns `None` (not applicable) when the filing didn't extract at all
+    on the first pass, rather than counting a pre-existing extraction
+    failure as a determinism failure too.
+    """
+    if filing["extraction_error"] is not None:
+        return None
+    second, error = _extract_safe(filing["doc_id"], filing["year"])
+    return error is None and filing["predicted_transactions"] == second
+
+
+def _print_report(report: dict, filings: list[dict]) -> None:
     kinds = ("digital", "scanned", "overall")
+    failed_by_kind = {
+        kind: sum(1 for f in filings if f["kind"] == kind and f["extraction_error"] is not None)
+        for kind in ("digital", "scanned")
+    }
+    total_by_kind = {
+        kind: sum(1 for f in filings if f["kind"] == kind) for kind in ("digital", "scanned")
+    }
+
     header = f"{'field':<22}" + "".join(f"{kind:>10}" for kind in kinds)
     print(header)
     print("-" * len(header))
@@ -107,8 +120,25 @@ def _print_report(report: dict) -> None:
             scores = report["overall"] if kind == "overall" else report["by_kind"][kind]
             row += f"{scores[field]:>10.2f}"
         print(row)
-
     print()
+
+    # A kind whose filings mostly failed to extract prints a score, but
+    # that score measures extraction coverage, not field accuracy — say so
+    # right next to the table, not only in eval/README.md prose, so the
+    # report itself surfaces this rather than relying on a reader having
+    # also read the docs (issue #40: "clearly surfaces which fields are
+    # weak and for which filing type").
+    for kind in ("digital", "scanned"):
+        failed, total = failed_by_kind[kind], total_by_kind[kind]
+        if failed:
+            print(
+                f"NOTE: {failed}/{total} {kind} filings failed extraction entirely "
+                f"(see 'Extraction errors' below) — the {kind} column above is diluted "
+                "by those as zero-scored, not a clean field-accuracy measurement."
+            )
+    if failed_by_kind["digital"] or failed_by_kind["scanned"]:
+        print()
+
     print("Weakest fields overall:")
     for field, score in weakest_fields(report["overall"], n=3):
         print(f"  {field}: {score:.2f}")
@@ -122,24 +152,25 @@ def main() -> None:
     parser.add_argument("--json", action="store_true", help="print the raw report as JSON")
     args = parser.parse_args()
 
-    gold_paths = sorted(GOLD_DIR.glob("*.json"))
-    if not gold_paths:
+    filings = load_gold_set()
+    if not filings:
         print(f"no gold files found under {GOLD_DIR}", file=sys.stderr)
         raise SystemExit(1)
 
-    filings, extraction_errors = load_gold_filings()
     report = score_gold_set(filings)
+    extraction_errors = {
+        f["doc_id"]: f["extraction_error"] for f in filings if f["extraction_error"] is not None
+    }
 
     determinism_failures = []
     determinism_checked = 0
-    for path in gold_paths:
-        gold = json.loads(path.read_text())
-        result = _check_determinism(gold["doc_id"], gold["year"])
+    for filing in filings:
+        result = check_determinism(filing)
         if result is None:  # extraction itself failed; not a determinism verdict
             continue
         determinism_checked += 1
         if not result:
-            determinism_failures.append(gold["doc_id"])
+            determinism_failures.append(filing["doc_id"])
 
     if args.json:
         output = {
@@ -156,7 +187,7 @@ def main() -> None:
         f"{sum(1 for f in filings if f['kind'] == 'scanned')} scanned)"
     )
     print()
-    _print_report(report)
+    _print_report(report, filings)
     print()
     if extraction_errors:
         print("Extraction errors (scored as a total miss on that filing):")
@@ -170,6 +201,11 @@ def main() -> None:
         f"Determinism check passed for all {determinism_checked} extractable filings "
         "(repeat run, identical output)."
     )
+    if determinism_checked < len(filings):
+        print(
+            f"({len(filings) - determinism_checked} filings could not be checked: "
+            "their extraction already failed.)"
+        )
 
 
 if __name__ == "__main__":
