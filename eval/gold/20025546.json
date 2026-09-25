@@ -1,0 +1,35 @@
+{
+  "doc_id": "20025546",
+  "kind": "digital",
+  "year": 2024,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "spouse",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "Apple Inc. - Common Stock (AAPL)",
+      "transaction_date": "2024-07-05",
+      "value_min": 15001,
+      "value_max": 50000,
+      "notification_date": "2024-07-30",
+      "filing_status": "New",
+      "sub_owner": "TD Ameritrade Account",
+      "description": "Sale of 25 Jan 2025 $230 Call contracts"
+    },
+    {
+      "line_no": 2,
+      "owner": "spouse",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Apple Inc. - Common Stock (AAPL)",
+      "transaction_date": "2024-07-05",
+      "value_min": 15001,
+      "value_max": 50000,
+      "notification_date": "2024-07-30",
+      "filing_status": "New",
+      "sub_owner": "TD Ameritrade Account",
+      "description": "Purchase of 25 Jan 2025 $215 Put contracts"
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "doc_id": "8219414",
+  "kind": "scanned",
+  "year": 2023,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "self",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "Ford Motor Co",
+      "transaction_date": "2023-02-06",
+      "value_min": 15001,
+      "value_max": 50000,
+      "notification_date": "2023-02-06",
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "self",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "Graftech Intl Ltd",
+      "transaction_date": "2023-02-06",
+      "value_min": 15001,
+      "value_max": 50000,
+      "notification_date": "2023-02-06",
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 3,
+      "owner": "self",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "Amazon.com Inc",
+      "transaction_date": "2023-02-06",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2023-02-06",
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 4,
+      "owner": "self",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "Carnival Corp",
+      "transaction_date": "2023-02-06",
+      "value_min": 15001,
+      "value_max": 50000,
+      "notification_date": "2023-02-06",
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 5,
+      "owner": "self",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "Academy Sports and Outdoors",
+      "transaction_date": "2023-02-06",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2023-02-06",
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}

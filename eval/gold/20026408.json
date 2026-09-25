@@ -1,0 +1,77 @@
+{
+  "doc_id": "20026408",
+  "kind": "digital",
+  "year": 2024,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "self",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Fortive Corporation Common Stock (FTV)",
+      "transaction_date": "2024-11-04",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2024-12-06",
+      "filing_status": "New",
+      "sub_owner": "Kean Family Partnership",
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "self",
+      "transaction_type": "exchange",
+      "asset_type": "stock",
+      "asset_description": "Liberty Global Ltd. - Class C Common Shares (LBTYK)",
+      "transaction_date": "2024-11-13",
+      "value_min": 15001,
+      "value_max": 50000,
+      "notification_date": "2024-11-27",
+      "filing_status": "New",
+      "sub_owner": "State Street Bank & Trust Co.",
+      "description": "Shares delivered out"
+    },
+    {
+      "line_no": 3,
+      "owner": "self",
+      "transaction_type": "exchange",
+      "asset_type": "stock",
+      "asset_description": "Liberty Global Ltd. - Class C Common Shares (LBTYK)",
+      "transaction_date": "2024-11-13",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2024-11-27",
+      "filing_status": "New",
+      "sub_owner": "State Street Bank & Trust Co.",
+      "description": "Shares received in"
+    },
+    {
+      "line_no": 4,
+      "owner": "self",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "Pernod Ricard Ord Ordinary Shares (PDRDF)",
+      "transaction_date": "2024-11-04",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2024-12-06",
+      "filing_status": "New",
+      "sub_owner": "Kean Family Partnership",
+      "description": null
+    },
+    {
+      "line_no": 5,
+      "owner": "self",
+      "transaction_type": "exchange",
+      "asset_type": "stock",
+      "asset_description": "Sunrise Communications AG - American Depositary Shares representing Class A shares (SNRE)",
+      "transaction_date": "2024-11-13",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2024-11-27",
+      "filing_status": "New",
+      "sub_owner": "State Street Bank & Trust Co.",
+      "description": "Shares received in"
+    }
+  ]
+}

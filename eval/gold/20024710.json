@@ -1,0 +1,63 @@
+{
+  "doc_id": "20024710",
+  "kind": "digital",
+  "year": 2024,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "spouse",
+      "transaction_type": "sale_partial",
+      "asset_type": "stock",
+      "asset_description": "NVIDIA Corporation - Common Stock (NVDA)",
+      "transaction_date": "2024-02-20",
+      "value_min": 250001,
+      "value_max": 500000,
+      "notification_date": "2024-03-01",
+      "filing_status": "New",
+      "sub_owner": "Schwab Brokerage Account",
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "dependent_child",
+      "transaction_type": "sale_partial",
+      "asset_type": "stock",
+      "asset_description": "NVIDIA Corporation - Common Stock (NVDA)",
+      "transaction_date": "2024-02-20",
+      "value_min": 15001,
+      "value_max": 50000,
+      "notification_date": "2024-03-01",
+      "filing_status": "New",
+      "sub_owner": "Schwab JM Brokerage Account",
+      "description": null
+    },
+    {
+      "line_no": 3,
+      "owner": "dependent_child",
+      "transaction_type": "sale_partial",
+      "asset_type": "stock",
+      "asset_description": "NVIDIA Corporation - Common Stock (NVDA)",
+      "transaction_date": "2024-02-20",
+      "value_min": 15001,
+      "value_max": 50000,
+      "notification_date": "2024-03-01",
+      "filing_status": "New",
+      "sub_owner": "Schwab DM Brokerage Account",
+      "description": null
+    },
+    {
+      "line_no": 4,
+      "owner": "spouse",
+      "transaction_type": "purchase",
+      "asset_type": "bond",
+      "asset_description": "US Treasury Bill",
+      "transaction_date": "2024-02-23",
+      "value_min": 250001,
+      "value_max": 500000,
+      "notification_date": "2024-03-01",
+      "filing_status": "New",
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}

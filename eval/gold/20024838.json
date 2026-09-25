@@ -1,0 +1,35 @@
+{
+  "doc_id": "20024838",
+  "kind": "digital",
+  "year": 2024,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "spouse",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "Exxon Mobil Corporation Common Stock (XOM)",
+      "transaction_date": "2024-03-11",
+      "value_min": 15001,
+      "value_max": 50000,
+      "notification_date": "2024-03-12",
+      "filing_status": "New",
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "spouse",
+      "transaction_type": "sale_partial",
+      "asset_type": "stock",
+      "asset_description": "Illumina, Inc. - Common Stock (ILMN)",
+      "transaction_date": "2024-03-11",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2024-03-12",
+      "filing_status": "New",
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}

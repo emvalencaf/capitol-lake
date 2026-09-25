@@ -1,0 +1,49 @@
+{
+  "doc_id": "8220508",
+  "kind": "scanned",
+  "year": 2024,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "self",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "Dollar General Stock",
+      "transaction_date": "2024-06-04",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2024-06-04",
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "self",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Chipotle Stock",
+      "transaction_date": "2024-06-04",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2024-06-04",
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 3,
+      "owner": "self",
+      "transaction_type": "purchase",
+      "asset_type": "bond",
+      "asset_description": "Ford Motor Credit Bond",
+      "transaction_date": "2024-06-13",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}

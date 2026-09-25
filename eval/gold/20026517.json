@@ -1,0 +1,63 @@
+{
+  "doc_id": "20026517",
+  "kind": "digital",
+  "year": 2025,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "joint",
+      "transaction_type": "exchange",
+      "asset_type": "bond",
+      "asset_description": "Dallas Tex Area Rapid 5.00% 12/01/25",
+      "transaction_date": "2024-12-02",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2025-01-06",
+      "filing_status": "New",
+      "sub_owner": "Stocks, Bonds, & Mutual Funds",
+      "description": "Called Security"
+    },
+    {
+      "line_no": 2,
+      "owner": "joint",
+      "transaction_type": "sale_full",
+      "asset_type": "other",
+      "asset_description": "Duke Street LLC, 50% Interest",
+      "transaction_date": "2024-12-23",
+      "value_min": 5000001,
+      "value_max": 25000000,
+      "notification_date": "2024-12-26",
+      "filing_status": "New",
+      "sub_owner": "Real estate investments",
+      "description": "sale of 2712 Duke Street, Alexandria, Virginia"
+    },
+    {
+      "line_no": 3,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "bond",
+      "asset_description": "Oklahoma Cnty OK Indep 3.00% 07.01.25",
+      "transaction_date": "2024-12-04",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2025-01-06",
+      "filing_status": "New",
+      "sub_owner": "Stocks, Bonds, & Mutual Funds",
+      "description": "15,000 units Oklahoma County, OK, Indep 3.00% 07/01/25"
+    },
+    {
+      "line_no": 4,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "bond",
+      "asset_description": "Oklahoma Cnty OK Indep 3.00% 07.01.25",
+      "transaction_date": "2024-12-04",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2025-01-06",
+      "filing_status": "New",
+      "sub_owner": "Stocks, Bonds, & Mutual Funds",
+      "description": "5,000 units Oklahoma County, OK, Indep 3.00% 07/01/25"
+    }
+  ]
+}

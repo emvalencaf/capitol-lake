@@ -1,0 +1,35 @@
+{
+  "doc_id": "20022184",
+  "kind": "digital",
+  "year": 2023,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "self",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "Meta Platforms, Inc. - Class A (META)",
+      "transaction_date": "2022-12-19",
+      "value_min": 15001,
+      "value_max": 50000,
+      "notification_date": "2022-12-27",
+      "filing_status": "New",
+      "sub_owner": "Morgan Stanley Smith Barney LLC Brokerage Account - Spouse Irrevocable Trust",
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "self",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "Stanley Black & Decker, Inc. (SWK)",
+      "transaction_date": "2022-12-19",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2022-12-27",
+      "filing_status": "New",
+      "sub_owner": "Morgan Stanley Smith Barney LLC Brokerage Account - Spouse Irrevocable Trust",
+      "description": null
+    }
+  ]
+}

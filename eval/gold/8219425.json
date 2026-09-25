@@ -1,0 +1,63 @@
+{
+  "doc_id": "8219425",
+  "kind": "scanned",
+  "year": 2023,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "bond",
+      "asset_description": "New York NY 1.216%",
+      "transaction_date": "2023-02-02",
+      "value_min": 100001,
+      "value_max": 250000,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "bond",
+      "asset_description": "DORT FINL CREDIT 4.4%",
+      "transaction_date": "2023-02-03",
+      "value_min": 100001,
+      "value_max": 250000,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 3,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "bond",
+      "asset_description": "Connecticut St 3.31%",
+      "transaction_date": "2023-02-23",
+      "value_min": 100001,
+      "value_max": 250000,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 4,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "bond",
+      "asset_description": "UNIV WA 2.211% 27 PUB EDUC",
+      "transaction_date": "2023-02-23",
+      "value_min": 100001,
+      "value_max": 250000,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}
