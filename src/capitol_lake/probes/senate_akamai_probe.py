@@ -90,7 +90,13 @@ def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
     url = url_template.format(filing_id=filing_id)
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
+        # `channel="chromium"` forces the classic full-Chromium headless
+        # mode: Playwright >=1.45 defaults headless launches to a separate
+        # "Chromium Headless Shell" binary that a plain `playwright install
+        # chromium` (docker/senate_akamai_probe.Dockerfile) doesn't
+        # download, which fails with "Executable doesn't exist ...
+        # chromium_headless_shell..." otherwise.
+        browser = playwright.chromium.launch(channel="chromium")
         try:
             page = browser.new_page()
             response = page.goto(url, wait_until="networkidle")

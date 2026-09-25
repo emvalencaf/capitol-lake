@@ -71,7 +71,20 @@ case "$cmd" in
       -var="aws_region=${region}" \
       -var="image_uri=${image_uri}"
 
-    echo "==> done. function: $(tf output -raw function_name)"
+    # `image_uri` uses the mutable `:latest` tag, so re-running `up` after a
+    # code fix pushes a new image digest behind the *same* string —
+    # Terraform sees no diff in that string and won't redeploy it. Forcing
+    # `update-function-code` here makes every `up` actually pick up
+    # whatever was just pushed, first run or not (idempotent/harmless
+    # when the digest is unchanged).
+    function_name="$(tf output -raw function_name)"
+    echo "==> forcing the Lambda onto the just-pushed image (update-function-code)"
+    aws lambda update-function-code --region "$region" \
+      --function-name "$function_name" \
+      --image-uri "$image_uri" >/dev/null
+    aws lambda wait function-updated --region "$region" --function-name "$function_name"
+
+    echo "==> done. function: $function_name"
     echo "Next: $0 invoke <a real /ptr/ filing uuid>"
     ;;
 
