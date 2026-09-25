@@ -29,6 +29,18 @@ services:
       exit 0
       "
 
+  # Local SQS emulation for the collect -> extract handoff (#43): a lightweight,
+  # free complement to MinIO's S3 emulation (LocalStack's SQS is Hobby-plan/
+  # non-commercial-only per docs/research/free-tool-inventory.md; ElasticMQ is
+  # Apache-2.0 with no such restriction). `docker/elasticmq.conf` pre-creates
+  # the `extract-queue` queue on boot.
+  elasticmq:
+    image: softwaremill/elasticmq-native:latest
+    ports:
+      - "9324:9324"
+    volumes:
+      - ./docker/elasticmq.conf:/opt/elasticmq.conf:ro
+
   # Stub pipeline stage, packaged and run the same way every future stage
   # will be: a Lambda container image invoked through the Runtime Interface
   # Emulator the base image provides. See docs/local-dev.md.
@@ -57,13 +69,17 @@ services:
       - "9101:8080"
     environment:
       AWS_ENDPOINT_URL_S3: http://minio:9000
+      AWS_ENDPOINT_URL_SQS: http://elasticmq:9324
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       AWS_REGION: us-east-1
       BRONZE_BUCKET: bronze
+      EXTRACT_QUEUE_URL: http://elasticmq:9324/000000000000/extract-queue
     depends_on:
       minio-init:
         condition: service_completed_successfully
+      elasticmq:
+        condition: service_started
 
   # Senate collector: fetches `/ptr/` filings by id and stores them into
   # bronze. Not scheduled (#18); invoked manually with a locally exported
@@ -80,6 +96,29 @@ services:
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       AWS_REGION: us-east-1
       BRONZE_BUCKET: bronze
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
+  # Extraction: routes a House PTR to its extractor and writes both silver
+  # Parquet parts. Packaged from a non-AWS base image (docker/extract.Dockerfile)
+  # since it's the one stage needing Tesseract, which the AWS Lambda base image
+  # can't `dnf install` (ADR-0001). Triggered by house-collect-stage's SQS
+  # messages in production; invoked directly here the same way every other
+  # stage's RIE endpoint is. See docs/local-dev.md.
+  extract-stage:
+    build:
+      context: .
+      dockerfile: docker/extract.Dockerfile
+    ports:
+      - "9103:8080"
+    environment:
+      AWS_ENDPOINT_URL_S3: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_REGION: us-east-1
+      BRONZE_BUCKET: bronze
+      SILVER_BUCKET: silver
     depends_on:
       minio-init:
         condition: service_completed_successfully

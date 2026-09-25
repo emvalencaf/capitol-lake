@@ -14,13 +14,10 @@ from pathlib import Path
 import pyarrow.parquet as pq
 import pytest
 
+from capitol_lake.keys import UnrecognizedBronzeKeyError
 from capitol_lake.schema import AssetType
 from capitol_lake.stages import extract as extract_module
-from capitol_lake.stages.extract import (
-    DocIdMismatchError,
-    UnrecognizedBronzeKeyError,
-    extract_house_filing,
-)
+from capitol_lake.stages.extract import DocIdMismatchError, extract_house_filing
 from capitol_lake.stages.house_collect import UnknownDocIdPrefixError
 
 FIXTURES = Path(__file__).parent / "fixtures"

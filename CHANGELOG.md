@@ -9,6 +9,57 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- Orchestration: Lambda handlers wired to an SQS chain, plus the extraction
+  stage's container image (#43), implementing the shape #18 settled.
+  `src/capitol_lake/stages/orchestration.py`'s `bronze_keys_from_event` is
+  the one place a handler unpacks its event, dispatching on shape: a plain
+  `{"bronze_key": ...}` invocation (kept for manual/RIE testing, every
+  handler still accepts it), an SQS event (each record's JSON `body` is
+  `extract_queue_message`'s `{"bronze_key": ...}`), or an S3 event (each
+  record's own `s3.object.key`, URL-decoded) — the entry point for the
+  Senate side, which has no scheduled collector to send an SQS message on
+  its behalf; once its `write_bytes` lands a bronze object, a bucket-level
+  S3 event notification (infra) triggers extract directly, whether the
+  object came from a real Lambda invocation or a human's manual upload.
+  `bronze_key_records_from_event` pairs each key with that record's SQS
+  `messageId` (`None` for a plain/S3 record), so a handler's per-message
+  failure reporting doesn't need to re-derive which records came off SQS
+  itself — including safely in a batch that mixes sources, which an earlier
+  version of this handler got wrong (a `record["messageId"]` lookup on a
+  non-SQS record would have raised `KeyError`; caught and fixed during this
+  issue's own code review, see `tests/test_orchestration.py`). `keys.py`
+  gains `parse_bronze_key` (chamber/year/doc_id back out of a bronze key),
+  promoted from a private helper `stages/extract.py` used to duplicate,
+  since it's now shared with `orchestration.py`.
+  `house_collect_handler.py` enqueues one SQS message per bronze key
+  `collect_house` actually wrote this run (never a `noop` key) to
+  `EXTRACT_QUEUE_URL`, left unset by default so the handler still runs
+  standalone. `extract_handler.py` now accepts a batch of SQS records
+  (batch size 1 in production) and reports a per-message failure via
+  `batchItemFailures` (`ReportBatchItemFailures`) so one filing's exception
+  doesn't fail the whole batch, verified live end-to-end against a real
+  House PTR fixture through MinIO + ElasticMQ (local SQS emulation, chosen
+  over LocalStack since its SQS coverage is Hobby-plan/non-commercial-only
+  per `docs/research/free-tool-inventory.md`, #4) via the Lambda Runtime
+  Interface Emulator; a plain or S3-event invocation still lets an
+  exception raise, matching every other handler. `docker/extract.Dockerfile`
+  resolves ADR-0001's deferred Tesseract-packaging item: neither the AWS
+  Lambda Python base image's nor plain `amazonlinux:2023`'s `dnf` repos
+  carry a `tesseract` package at all, so this stage instead uses AWS's
+  documented "alternative base image" pattern (`python:3.12-slim`,
+  `apt-get install tesseract-ocr` — the same package CI already installs —
+  `awslambdaric` via `pip`, and a separately-installed `aws-lambda-rie` for
+  local testing, wired by `docker/extract-entrypoint.sh`); every other
+  stage's image is unaffected. `infra/modules/lambda-stage` (Terraform,
+  `terraform validate`-clean, not yet wired into a root module) is the
+  reserved-concurrency/DLQ-per-stage configuration the issue's acceptance
+  criteria calls for. ADR 0011 records both packaging decisions and why the
+  actual topology is three Lambdas, not the four #18 named: #41 had already
+  folded ticker resolution and LLM fallback into `extract_handler.py`, and
+  no silver-write business logic exists beyond the `put_object` calls
+  already there, so `extract`'s queue carries the slower DLQ backoff #43
+  asks for on the "ticker/LLM-fallback" stage.
+
 - `src/capitol_lake/stages/quality_gate.py`: per-run quality gate (#42). `evaluate_quality_gate` combines three independent, pure checks over a `RunSummary` pair (prior run vs. current run, one summary per silver table) and never touches S3 or any prior-run store itself: `check_volume_regression` fails when the current run's `row_count` dropped more than a configurable threshold (50% default) from the prior run's; `check_completeness` fails when any field the caller's `RunSummary.null_counts` names (a design-intentionally-non-null one, per `schema.py`) had a null this run; `check_row_count_divergence` fails when `row_count` disagrees with the source-index-announced count, skipped when that count isn't known. A `GateResult.passed` is `True` only when none of the three failed, letting a caller decide whether to skip or proceed with the silver overwrite without invoking the orchestration layer (#43, out of scope here) — the pure-function seam the spec's testing decisions call for. Distinct from the gold-set evaluation metric (`evaluation.py`, #40): this gate reasons only about run-to-run operational health, never extraction accuracy.
 - `src/capitol_lake/stages/llm_fallback.py`: LLM fallback stage (#41) — an optional, per-field structured-output recovery pass for a `Transaction` field the rule-based cascade left null or `LOW_CONFIDENCE`, gated two ways so it's never invoked unconditionally: `eligible_fields_from_scores` only admits a field whose macro-averaged score from the evaluation harness (`evaluation.score_gold_set`/`scripts/run_eval.py --json`, #40) is below a caller-supplied threshold, and `fields_needing_fallback` further narrows to fields actually null/low-confidence on a given transaction. The structured-output contract (`fallback_schema`) is built directly from `evaluation.SCORED_FIELDS` and the silver schema's own enum/date/number types — no separate DTO or translation layer; `apply_fallback_result` only coerces JSON scalars back to the schema's native types (enums, `date`, `float`, combining `value_min`/`value_max` into one `ValueRange`) and marks the touched fields `LLM_CONFIDENCE`, lowers `confidence` to match, and tags `Provenance.extractor` with a `+llm-fallback` suffix so a fallback-touched row is never indistinguishable from a purely rule-based one. Two entry points mirror ADR 0002's digital/scanned split: `apply_text_fallback` (digital, the PDF's own text) and `apply_vision_fallback` (scanned, directly on the page image — OCR text is the same lossy signal that produced the null, per the checkbox-grid finding in `scanned_extract.py`). Both take an injected `complete_text`/`complete_vision` callable, following this codebase's network-dependency-injection convention (`ticker_resolve.resolve_ticker`); `src/capitol_lake/llm_providers.py` wires concrete providers (LM Studio/Gemma as the free local default, Gemini and Groq as free-tier alternatives, Groq text-only since it hosts no free vision model), selected via the `LLM_FALLBACK_PROVIDER` env var with no code change to swap. `stages/extract.py`'s `extract_house_filing` gains an optional `llm_fallback(transaction) -> transaction` hook, applied to every row before ticker resolution, so a still-null `ticker`'s `asset_description`/`asset_type` can benefit from anything the fallback stage just recovered; a caller wires the hook to `apply_text_fallback`/`apply_vision_fallback` with whatever eligible-field set and provider it chooses. `handlers/extract_handler.py`'s `_build_llm_fallback` wires the digital path end-to-end: it's a no-op unless `LLM_FALLBACK_ENABLED` is set and an `LLM_FALLBACK_EVAL_REPORT` (the JSON `scripts/run_eval.py --json` produces) is found, and even then only touches fields that report's `by_kind["digital"]` scores below `LLM_FALLBACK_THRESHOLD` (default 0.8) — real, threshold-gated invocation, not just the tested primitive. The scanned/vision path is left unwired in the handler: `apply_vision_fallback` is implemented and tested, but which page image belongs to which transaction isn't tracked yet by `scanned_extract.ScannedExtraction`, and guessing would violate this project's own honest-null convention (ADR 0002); noted as follow-up rather than solved here. `llm_providers.py` performs real network I/O and is not unit-tested, per this repo's handler convention; the decision logic it wraps is tested against canned provider responses.
 - `eval/`: the extraction evaluation harness (#40, closing #8's spec stories #23-#26). `eval/gold/` holds 40 hand-labelled House PTR filings (30 digital, 10 scanned, spanning 2021/2023/2024/2025), sampled from the House Clerk's public index and matched to their PDFs in `eval/fixtures/` (`manifest.json` records each fixture's `doc_id`/`year`/`kind`). Digital filings were labelled from pypdf's own generic `extract_text()` output (independent of this project's structural parser); scanned filings, which have no text layer, were labelled visually from rasterized page images since this sandbox has no working `tesseract` install — including reading the paper form's `transaction_type`/dollar-bracket checkboxes by eye, which `extract_scanned` cannot do (ADR 0002) and is expected to score near zero on. `src/capitol_lake/evaluation.py` scores a predicted `Transaction` row against its gold counterpart per field (`SCORED_FIELDS`; ticker and `Filing`-level metadata are excluded per the issue), matched by `line_no`: enums/dates/dollar amounts by exact match (both null counts as a match), free text by a continuous `difflib.SequenceMatcher` similarity ratio. `score_filing` averages across the union of a filing's gold and predicted line numbers, so both a missed gold row and a hallucinated predicted row (ADR 0002: "an honest zero rows... beats a fabricated one") score 0.0 on every field, even on a filing with zero gold transactions (a legitimate "nothing to report" PTR). `score_set`/`score_gold_set` macro-average filing scores by set (digital/scanned) and overall, the two-level "macro-averaged by filing then by set" the issue asks for. `scripts/run_eval.py` runs the current extractors against the gold set and prints the per-field report; a single filing's extractor exception is caught and scored as a total miss rather than aborting the whole run, and reported separately under "Extraction errors" — the harness's first real run this way surfaced a genuine `extract_digital` gap (a literal, non-bracket dollar amount crashes `parse_value_range`), filed as #57 rather than fixed here. The runner also performs the one-time repeat-run determinism check the issue asks for (not an ongoing metric), skipping it for a filing whose extraction already failed. `src/capitol_lake/stages/extract.py`'s private `_transaction_row` helper is renamed `transaction_row` (public), since the eval runner needs it to shape a predicted row the same way the silver Parquet write does, without duplicating that mapping. `eval/README.md` documents the sampling method, gold record format, scored-field rationale, averaging method, and the current run's findings (including why the scanned-column scores in this environment are an artifact of a missing `tesseract` binary, not real accuracy, and should be re-run somewhere it's installed).
