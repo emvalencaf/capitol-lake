@@ -96,7 +96,20 @@ def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
         # chromium` (docker/senate_akamai_probe.Dockerfile) doesn't
         # download, which fails with "Executable doesn't exist ...
         # chromium_headless_shell..." otherwise.
-        browser = playwright.chromium.launch(channel="chromium")
+        # Lambda's container sandbox lacks Chromium's usual kernel sandbox
+        # capabilities, a GPU, and any meaningful /dev/shm size — launching
+        # without these flags is a well-documented failure mode there
+        # (microsoft/playwright#14023: prctl(PR_SET_NO_NEW_PRIVS) failures,
+        # GPU process crash-loops, eventual launch timeout).
+        browser = playwright.chromium.launch(
+            channel="chromium",
+            args=[
+                "--no-sandbox",
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--single-process",
+            ],
+        )
         try:
             page = browser.new_page()
             response = page.goto(url, wait_until="networkidle")
