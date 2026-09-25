@@ -27,9 +27,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip install --no-cache-dir awslambdaric playwright
 
+# Playwright's default browser path is $HOME/.cache/ms-playwright, resolved
+# at both install time (root, building) and launch time (Lambda runs
+# container images as a sandboxed, non-root user with its own $HOME, e.g.
+# sbx_user1051) — those two paths don't match, so the browser this RUN
+# installs is invisible at runtime ("Executable doesn't exist at
+# /home/sbx_user.../chromium-.../chrome") unless the path is pinned to
+# somewhere both users resolve identically. Setting this env var (not just
+# ARG) makes it part of the image config, so it's still in effect at
+# runtime, not just during this build step.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+
 # Installs Chromium plus the OS-level shared libraries it needs
 # (`--with-deps`), same as a human would run locally per #23's method.
-RUN playwright install --with-deps chromium
+RUN playwright install --with-deps chromium \
+    && chmod -R o+rX /opt/ms-playwright
 
 ARG LAMBDA_TASK_ROOT=/var/task
 ARG RIE_VERSION=1.20
