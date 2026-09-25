@@ -126,6 +126,18 @@ heading when `development` is released to `master`.
 - Local MinIO + Lambda Runtime Interface Emulator scaffold (`docker-compose.yml`, `docker/lambda.Dockerfile`) mirroring the intended S3 key layout, with conventions documented in `docs/local-dev.md`.
 - `src/capitol_lake/stages/bronze_write.py`: chamber-agnostic bronze contract — a pure, hash-gated idempotent write decision (no-op on matching sha256, versioned `<doc_id>.<sha256[:8]>.<ext>` key on a different hash, original key never overwritten) plus the sidecar `.meta.json` payload; `bronze_versioned_key`/`bronze_meta_key` key helpers.
 
+### Fixed
+
+- `src/capitol_lake/stages/digital_extract.py`: `parse_value_range` now
+  accepts a bare `$X[.XX]` literal amount (e.g. `$9.00`), treating it as
+  `ValueRange(X, X)`, instead of returning `None` and failing the whole
+  filing's extraction with `unreadable amount`. Two real 2023 House PTRs
+  sampled while building the #40 gold set print this shape for a
+  small-value line under the $1,000 bracket-reporting threshold: `20022260`
+  (Pelosi, `$9.00`) and `20023819` (Sessions, `$569.25` and `$493.91`), both
+  now added as `tests/fixtures/house_digital_*.pdf` regression fixtures.
+  (#57)
+
 ### Changed
 
 - `src/capitol_lake/stages/_house_form.py`: House owner-code and asset-type/ticker regexes and lookup tables (`OWNER_RE`, `OWNERS`, `ASSET_TYPE_CODE_RE`, `ASSET_TYPES`, `PRINTED_SYMBOL_RE`), shared by `digital_extract.py` and `scanned_extract.py` instead of duplicated between them, with no behavior change.

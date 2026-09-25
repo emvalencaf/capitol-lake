@@ -104,6 +104,9 @@ _SIGNED_RE = re.compile(r"Digitally Signed:\s*.+?,\s*(?P<date>\d{2}/\d{2}/\d{4})
 _AMOUNT_TAIL_RE = re.compile(r"^(?P<asset>.*?)\s*(?P<max>\$[\d,]+)$")
 _RANGE_RE = re.compile(r"^\$(?P<min>[\d,]+)\s*-\s*\$(?P<max>[\d,]+)$")
 _OVER_RE = re.compile(r"Over \$(?P<min>[\d,]+)$")
+# A literal amount under the $1,000 bracket-reporting threshold, printed
+# instead of a bracket (e.g. "$9.00").
+_LITERAL_RE = re.compile(r"^\$(?P<amount>[\d,]+(?:\.\d+)?)$")
 
 _TRANSACTION_TYPES = {
     "P": TransactionType.PURCHASE,
@@ -146,16 +149,17 @@ def _parse_date(raw: str) -> date:
     return datetime.strptime(raw, "%m/%d/%Y").date()
 
 
-def _dollars(raw: str) -> int:
-    return int(raw.replace(",", ""))
+def _dollars(raw: str) -> float:
+    return float(raw.replace(",", ""))
 
 
 def parse_value_range(raw: str) -> ValueRange | None:
     """Parse a House amount column (`$1,001 - $15,000`, `Over $50,000,000`).
 
     An open-ended `Over $X` bracket starts one dollar above `X`, matching how
-    the closed brackets start (`$1,001`), and has a null upper bound. Returns
-    None for text that isn't a complete amount.
+    the closed brackets start (`$1,001`), and has a null upper bound. A bare
+    `$X[.XX]` (under the $1,000 bracket-reporting threshold) is its own
+    min and max. Returns None for text that isn't a complete amount.
     """
     raw = " ".join(raw.split())
     match = _RANGE_RE.match(raw)
@@ -164,6 +168,10 @@ def parse_value_range(raw: str) -> ValueRange | None:
     match = _OVER_RE.search(raw)
     if match:
         return ValueRange(_dollars(match.group("min")) + 1, None)
+    match = _LITERAL_RE.match(raw)
+    if match:
+        amount = _dollars(match.group("amount"))
+        return ValueRange(amount, amount)
     return None
 
 

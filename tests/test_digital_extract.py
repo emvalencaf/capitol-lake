@@ -192,10 +192,31 @@ def test_multi_page_filing_resolves_partial_sales_and_options():
         ("$1,001 - $15,000", ValueRange(1_001, 15_000)),
         ("Over $50,000,000", ValueRange(50_000_001, None)),
         ("Spouse/DC Over $1,000,000", ValueRange(1_000_001, None)),
+        ("$9.00", ValueRange(9, 9)),
+        ("$569.25", ValueRange(569.25, 569.25)),
     ],
 )
 def test_parse_value_range(raw, expected):
     assert parse_value_range(raw) == expected
+
+
+def test_literal_dollar_amount_under_the_bracket_threshold():
+    # 20022260 (Pelosi, 2023): a dividend-reinvestment line prints a bare
+    # "$9.00" instead of a bracket. Regression test for #57.
+    transactions = _extract("20022260").transactions
+
+    literal = next(t for t in transactions if t.value_range == ValueRange(9, 9))
+    assert literal.value_range.min == literal.value_range.max == 9
+
+
+def test_multiple_literal_dollar_amounts_in_one_filing():
+    # 20023819 (Sessions, 2023): two lines each print a bare literal amount.
+    # Regression test for #57.
+    transactions = _extract("20023819").transactions
+
+    value_ranges = {t.value_range for t in transactions}
+    assert ValueRange(569.25, 569.25) in value_ranges
+    assert ValueRange(493.91, 493.91) in value_ranges
 
 
 def test_absent_sub_owner_mid_table_nulls_the_field_instead_of_borrowing_the_next_asset():
