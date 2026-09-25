@@ -15,10 +15,26 @@ variable "state_bucket_name" {
 }
 
 variable "tags" {
-  description = "Tags applied to the state bucket."
+  description = "Tags applied to the state bucket and the GitHub Actions OIDC resources."
   type        = map(string)
   default = {
     Project   = "capitol-lake"
     ManagedBy = "terraform"
   }
+}
+
+variable "github_repository" {
+  description = "GitHub repository the OIDC trust policy scopes to, as \"owner/repo\" (#46)."
+  type        = string
+  default     = "emvalencaf/capitol-lake"
+}
+
+variable "github_environment" {
+  description = <<-EOT
+    Name of the GitHub Environment the `terraform apply` job runs through
+    (required-reviewer protection configured by hand in repo settings, #46).
+    Must match the `environment:` key in .github/workflows/infra-cicd.yml.
+  EOT
+  type        = string
+  default     = "production"
 }

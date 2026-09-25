@@ -6,7 +6,9 @@ Single environment, no dev/staging (ADR-0009's scoping decision).
 ## Layout
 
 - `bootstrap/` — one-time, local-state module that creates the S3 bucket the
-  main stack's own backend depends on. Run this first, by hand.
+  main stack's own backend depends on, plus the GitHub Actions OIDC provider
+  and IAM role `.github/workflows/infra-cicd.yml` assumes (#46). Run this
+  first, by hand.
 - `modules/storage` — bronze/silver S3 buckets.
 - `modules/pipeline` — ECR repositories, IAM roles, SSM secret parameters,
   and the three Lambda stages (`house-collect`, `senate-collect`, `extract`),
@@ -21,11 +23,13 @@ Single environment, no dev/staging (ADR-0009's scoping decision).
 ## Standing it up from zero
 
 ```bash
-# 1. Bootstrap the state bucket (local state, run once by hand).
+# 1. Bootstrap the state bucket + GitHub Actions OIDC role (local state,
+#    run once by hand).
 cd infra/bootstrap
 terraform init
 terraform apply
-terraform output state_bucket_name  # feed into backend.hcl below
+terraform output state_bucket_name       # feed into backend.hcl below
+terraform output github_actions_role_arn # feed into the AWS_ROLE_ARN repo variable below
 
 # 2. Point the main stack's backend at that bucket.
 cd ..
@@ -39,6 +43,24 @@ terraform plan -var="finops_alert_email=you@example.com"
 `terraform apply` (building/pushing each stage's container image to its ECR
 repository, and populating the SSM secret parameters with real values) is a
 deployment step, out of scope for the infra work tracked here.
+
+## CI/CD (#46)
+
+`.github/workflows/infra-cicd.yml` runs `terraform plan` on pull requests
+touching `infra/**` and `terraform apply` on push to `master`, authenticating
+to AWS via OIDC (`infra/bootstrap`'s role, no long-lived access keys as repo
+secrets). One-time manual setup, in addition to `infra/bootstrap`'s apply
+above:
+
+- Create a GitHub Environment named `production` (repo Settings >
+  Environments) with a required reviewer — this is what actually gates
+  `apply`, not the workflow file. Its name must match `var.github_environment`
+  in `infra/bootstrap` (default `production`).
+- Set these as repository **variables** (Settings > Secrets and variables >
+  Actions > Variables — not secrets, none of these grant access on their own):
+  - `AWS_ROLE_ARN` — `infra/bootstrap`'s `github_actions_role_arn` output.
+  - `TF_STATE_BUCKET` — `infra/bootstrap`'s `state_bucket_name` output.
+  - `FINOPS_ALERT_EMAIL` — same value as `var.finops_alert_email` above.
 
 ## Notes
 
