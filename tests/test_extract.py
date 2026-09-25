@@ -8,6 +8,7 @@ they're non-empty.
 """
 
 import dataclasses
+from datetime import date
 from pathlib import Path
 
 import pyarrow.parquet as pq
@@ -168,6 +169,49 @@ def test_resolve_ticker_result_lands_on_a_still_null_stock_row(monkeypatch):
 
     table = _read_parquet(result["transactions"]["bytes"])
     assert table.to_pylist()[0]["ticker"] == "RESOLVED"
+
+
+def test_llm_fallback_is_applied_before_ticker_resolution():
+    # llm_fallback is called for every row, and its output feeds
+    # resolve_ticker (still-null ticker, stock/ETF asset_type) - here it
+    # rewrites asset_type to STOCK so resolve_ticker gets called at all.
+    pdf_bytes = (FIXTURES / "house_digital_20030646.pdf").read_bytes()
+    fallback_calls: list[str] = []
+    resolve_calls: list[AssetType] = []
+
+    def _llm_fallback(transaction):
+        fallback_calls.append(transaction.doc_id)
+        return dataclasses.replace(
+            transaction,
+            asset_type=AssetType.STOCK,
+            ticker=None,
+            filing_date=date(2025, 6, 2),
+        )
+
+    def _resolve_ticker(asset_description: str, asset_type: AssetType) -> str | None:
+        resolve_calls.append(asset_type)
+        return "RESOLVED"
+
+    result = extract_house_filing(
+        pdf_bytes,
+        bronze_key="bronze/house/year=2025/20030646.pdf",
+        llm_fallback=_llm_fallback,
+        resolve_ticker=_resolve_ticker,
+    )
+
+    assert len(fallback_calls) == 2
+    assert resolve_calls == [AssetType.STOCK, AssetType.STOCK]
+    table = _read_parquet(result["transactions"]["bytes"])
+    assert all(row["ticker"] == "RESOLVED" for row in table.to_pylist())
+
+
+def test_no_llm_fallback_argument_performs_no_fallback():
+    pdf_bytes = (FIXTURES / "house_digital_20030646.pdf").read_bytes()
+
+    result = extract_house_filing(pdf_bytes, bronze_key="bronze/house/year=2025/20030646.pdf")
+
+    table = _read_parquet(result["transactions"]["bytes"])
+    assert table.num_rows == 2
 
 
 def test_no_resolve_ticker_argument_performs_no_resolution():
