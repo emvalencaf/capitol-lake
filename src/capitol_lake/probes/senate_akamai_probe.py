@@ -150,6 +150,7 @@ def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
     that only exercises `classify_probe_result`) never requires the package
     to be installed.
     """
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
     from playwright.sync_api import sync_playwright
 
     url = url_template.format(filing_id=filing_id)
@@ -181,23 +182,27 @@ def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
             home_response = page.goto(SENATE_HOME_URL, wait_until="networkidle")
             home_status_code = home_response.status if home_response is not None else 0
 
-            # A plain Locator.check() hung indefinitely (30s timeout) here on
-            # a real Lambda run: Playwright's actionability engine waits out
-            # any navigation the click triggers as part of the click itself,
-            # and that wait never resolved in this environment — plausibly
-            # interacting badly with --single-process. Setting the checkbox
-            # and submitting its form purely via JS sidesteps Playwright's
-            # click-driven navigation wait entirely; only the explicit
-            # `wait_for_load_state` below waits for the resulting page.
+            # Locator.check() hung for the full 30s timeout on a real Lambda
+            # run, but its own log showed the click and the resulting
+            # navigation both completing ("click action done", "navigations
+            # have finished") — check() hangs *after* that, re-verifying the
+            # checkbox is still checked, which can never succeed once the
+            # click's own onchange handler has already navigated the page
+            # away (the original element is detached). A JS-only submit
+            # (checked=true; form.submit()) avoided that hang but got
+            # rejected — plausibly because it fires a synthetic, untrusted
+            # DOM event (event.isTrusted: false), a signal some bot defenses
+            # check for, unlike a real click. `.click()` (not `.check()`)
+            # performs a genuine, trusted click without that unreachable
+            # post-condition, so it shouldn't hang the same way `.check()`
+            # did — but tolerate a timeout anyway, since the click and its
+            # navigation may already have succeeded by the time it fires.
             agreement_accepted = False
             if page.locator(_AGREEMENT_CHECKBOX_SELECTOR).count() > 0:
-                page.evaluate(
-                    """() => {
-                        const cb = document.querySelector('input[name="prohibition_agreement"]');
-                        cb.checked = true;
-                        cb.form.submit();
-                    }"""
-                )
+                try:
+                    page.locator(_AGREEMENT_CHECKBOX_SELECTOR).click(timeout=10_000)
+                except PlaywrightTimeoutError:
+                    pass
                 page.wait_for_load_state("networkidle")
                 agreement_accepted = True
 

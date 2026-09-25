@@ -117,19 +117,56 @@ different failures:
    a session/cookie-persistence issue specific to the filing request, a
    genuinely new and more interesting finding.
 
-`run_probe` now also captures `post_agreement_url` (`page.url` right after
-the agreement form submits, before the filing is ever requested) to tell
-these apart — **not yet rerun with this fix.** Next step: redeploy
+`run_probe` was corrected to also capture `post_agreement_url`. Result:
+
+```json
+{
+  "post_agreement_url": "https://efdsearch.senate.gov/search/home/",
+  "final_url": "https://efdsearch.senate.gov/search/home/",
+  "outcome": "ambiguous",
+  "agreement_accepted": true
+}
+```
+
+**Case 1 confirmed: the agreement submission itself was rejected/ignored** —
+`post_agreement_url` equals `SENATE_HOME_URL`, i.e. the JS-driven
+`checked=true; form.submit()` bounced straight back to the same page,
+before the filing was ever requested.
+
+### Attempt 5: confound identified — the submission method itself, not (necessarily) Lambda
+
+The JS-only submit fires a *synthetic* DOM event
+(`event.isTrusted: false`) rather than a real user gesture — a signal some
+bot defenses specifically check for, independent of IP origin. This is a
+real confound: attempt 4's rejection could reflect a Lambda-specific block,
+or it could just as easily reflect "this exact synthetic-submit approach
+would fail from a local network too." Re-reading the original
+`Locator.check()` timeout's own log (attempt 2's fix) supports the latter:
+the log showed the click and its resulting navigation both completing
+("click action done", "navigations have finished") — `check()`'s 30s hang
+came *after* that, re-verifying the checkbox is still in the checked state,
+which can never succeed once its own `onchange` handler has already
+navigated the page away (the original element is detached). That strongly
+suggests the real click's own submission likely succeeded before attempt
+2 was ever recorded as a hard failure — we just never read the result.
+
+`run_probe` now uses a real, trusted `Locator.click()` (not `.check()`, so
+no unreachable post-click "still checked" verification; timeout tolerated
+via `try`/`except`, since the click and its navigation may already have
+succeeded by the time it fires) instead of the JS-only submit. **Not yet
+rerun with this fix.** Next step: redeploy
 (`./scripts/deploy-senate-akamai-probe.sh up`) and `invoke` again, and
 record here:
 
-- `post_agreement_url` — was the agreement itself accepted (`/search/`) or
-  rejected (bounced back to `SENATE_HOME_URL` immediately)?
+- `post_agreement_url` — accepted (`/search/`) or still rejected (bounced
+  back to `SENATE_HOME_URL`) with a *real* click this time?
 - `final_url` and `outcome` for the filing request that follows.
-- If still redirected/blocked: whether it looks like a hard block
-  (consistent across retries, matches Akamai's known block-page shape) or
-  something workaroundable (rate-limit-shaped, intermittent, or a different
-  failure mode entirely).
+- If still redirected/blocked even with a real click: this would be much
+  stronger evidence of an actual Lambda-origin block (the synthetic-event
+  confound above would be ruled out), and whether it looks like a hard
+  block (consistent across retries, matches Akamai's known block-page
+  shape) or something workaroundable (rate-limit-shaped, intermittent, or a
+  different failure mode entirely).
 - Date run and which AWS region/account the Lambda egress IP came from.
 
 That result is what unblocks #28's design decision (manual-only vs.
