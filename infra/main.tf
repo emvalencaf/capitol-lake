@@ -39,3 +39,16 @@ module "scheduling" {
 
   tags = var.common_tags
 }
+
+module "finops" {
+  source = "./modules/finops"
+
+  alert_email = var.finops_alert_email
+
+  budget_amount_usd = var.budget_amount_usd
+
+  staleness_function_name  = module.pipeline.house_collect_function_name
+  staleness_period_seconds = var.house_schedule_period_seconds
+
+  tags = var.common_tags
+}

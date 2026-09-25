@@ -26,3 +26,8 @@ output "senate_collect_function_name" {
 output "extract_function_name" {
   value = module.pipeline.extract_function_name
 }
+
+output "finops_alerts_topic_arn" {
+  description = "SNS topic budget alerts and the pipeline staleness alarm publish to."
+  value       = module.finops.alerts_topic_arn
+}

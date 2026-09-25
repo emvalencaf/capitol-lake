@@ -15,6 +15,25 @@
 
 locals {
   stage_names = ["house-collect", "senate-collect", "extract"]
+
+  # Chamber override per stage (ADR-0010): only house-collect/senate-collect
+  # are chamber-specific; extract processes both, so it keeps var.tags'
+  # Chamber default ("n/a") rather than picking one.
+  stage_chamber = {
+    "house-collect"  = "house"
+    "senate-collect" = "senate"
+  }
+
+  # Per-stage tags: var.tags + Stage, with the Chamber override above where
+  # one applies. Shared by every per-stage resource below.
+  stage_tags = {
+    for stage in local.stage_names :
+    stage => merge(
+      var.tags,
+      { Stage = stage },
+      contains(keys(local.stage_chamber), stage) ? { Chamber = local.stage_chamber[stage] } : {}
+    )
+  }
 }
 
 resource "aws_ecr_repository" "this" {
@@ -27,7 +46,7 @@ resource "aws_ecr_repository" "this" {
     scan_on_push = true
   }
 
-  tags = merge(var.tags, { Stage = each.value })
+  tags = local.stage_tags[each.value]
 }
 
 data "aws_iam_policy_document" "lambda_assume_role" {
@@ -46,7 +65,7 @@ resource "aws_iam_role" "this" {
 
   name               = "capitol-lake-${each.value}-role"
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
-  tags               = merge(var.tags, { Stage = each.value })
+  tags               = local.stage_tags[each.value]
 }
 
 resource "aws_iam_role_policy_attachment" "logs" {
@@ -158,7 +177,7 @@ module "extract" {
     GROQ_API_KEY_SSM_PARAM     = aws_ssm_parameter.secret["groq-api-key"].name
   }
 
-  tags = merge(var.tags, { Stage = "extract" })
+  tags = local.stage_tags["extract"]
 }
 
 resource "aws_iam_role_policy" "extract_sqs" {
@@ -189,7 +208,7 @@ module "house_collect" {
     EXTRACT_QUEUE_URL = module.extract.queue_url
   }
 
-  tags = merge(var.tags, { Stage = "house-collect" })
+  tags = local.stage_tags["house-collect"]
 }
 
 resource "aws_iam_role_policy" "house_collect_sqs" {
@@ -219,5 +238,5 @@ module "senate_collect" {
     BRONZE_BUCKET = var.bronze_bucket_name
   }
 
-  tags = merge(var.tags, { Stage = "senate-collect" })
+  tags = local.stage_tags["senate-collect"]
 }
