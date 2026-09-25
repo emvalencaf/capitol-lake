@@ -9,17 +9,21 @@ heading when `development` is released to `master`.
 
 ### Added
 
-- Standalone Lambda-Akamai probe for #29 (unclaimed/deferred question, not
-  yet run): `capitol_lake.probes.senate_akamai_probe` drives one real
-  headless-Playwright request at a Senate eFD `/ptr/` filing and classifies
-  the response as `cleared`/`blocked_akamai`/`blocked_other`/`ambiguous`;
-  `infra/probes/senate-akamai-probe/` (standalone Terraform, own state,
-  outside the main stack and its CI/CD apply gate) and
-  `docker/senate_akamai_probe.Dockerfile` (unverified — see its header) let
-  a future session actually run it once and record the result in
-  `docs/research/senate-akamai-lambda-probe.md`, which #28's automation
-  design is contingent on. `scripts/deploy-senate-akamai-probe.sh` wraps
-  the build/push/apply/invoke/destroy sequence for that future run.
+- Senate-Akamai Lambda-egress probe (#29, run and resolved — **result:
+  PASS**): `capitol_lake.probes.senate_akamai_probe` drives one real
+  headless-Playwright request (warm-up navigation, the site's own
+  `prohibition_agreement` gate accepted via a real click, then the target
+  filing) at a Senate eFD `/ptr/` filing and classifies the response as
+  `cleared`/`blocked_akamai`/`blocked_other`/`ambiguous`; run live from a
+  real AWS Lambda (`infra/probes/senate-akamai-probe/`, standalone
+  Terraform, since torn down) via
+  `docker/senate_akamai_probe.Dockerfile` and
+  `scripts/deploy-senate-akamai-probe.sh` (build/push/apply/invoke/destroy).
+  Confirmed a Lambda-origin request clears the Akamai bot/fingerprint check
+  the same way #23's local-network probe did, once the automation replicates
+  the real access flow — see `docs/research/senate-akamai-lambda-probe.md`
+  for the full attempts log and evidence. Unblocks #28's Senate collector
+  automation design decision.
 - CI/CD for `infra/` via GitHub Actions and OIDC (#46), per ADR-0009:
   `.github/workflows/infra-cicd.yml` runs `terraform plan` on pull requests
   touching `infra/**` and `terraform apply` on push to `master`, authenticating

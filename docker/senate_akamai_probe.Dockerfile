@@ -13,19 +13,22 @@
 # downloaded separately for local testing, both wired up by
 # extract-entrypoint.sh.
 #
-# UNVERIFIED: this Dockerfile has not been built or run against a real
-# Lambda container runtime — Playwright's Chromium is heavy (~300MB+) and
-# whichever system libraries `playwright install --with-deps` pulls in on
-# Debian may still need adjustment once someone actually builds this image.
-# Confirm `docker build` and a local RIE invocation succeed before relying
-# on it for the live probe.
+# Verified against a real Lambda container runtime (see
+# docs/research/senate-akamai-lambda-probe.md's Attempts log): the fixes
+# below (PLAYWRIGHT_BROWSERS_PATH, Lambda-required Chromium launch flags in
+# senate_akamai_probe.py) came from real deploy failures against this exact
+# image, ending in a confirmed "cleared" probe result.
 FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir awslambdaric playwright
+# Pinned to the version actually verified working (see the Attempts log
+# above) — unlike docker/extract.Dockerfile's requirements.txt, this is a
+# single inline pin rather than a separate file, since this image has only
+# two runtime dependencies.
+RUN pip install --no-cache-dir awslambdaric playwright==1.63.0
 
 # Playwright's default browser path is $HOME/.cache/ms-playwright, resolved
 # at both install time (root, building) and launch time (Lambda runs
