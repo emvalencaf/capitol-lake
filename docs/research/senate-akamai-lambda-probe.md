@@ -26,53 +26,67 @@ down; this is a throwaway diagnostic, not infra kept running.
 
 ## Result
 
-**2026-09-25, preliminary — inconclusive, needs a rerun.** #29 itself scopes
-this ticket as "stays open and unclaimed here until a future
+**2026-09-25, `us-east-1` — FAIL: the Lambda-origin request does not clear
+the check the way #23's local-network probe did.** #29 itself scopes this
+ticket as "stays open and unclaimed here until a future
 implementation/cloud-lift effort picks it up"; the human operating this repo
-went ahead and ran the probe anyway against a real AWS account
-(`us-east-1`), working through a chain of deploy-time bugs along the way
-(Playwright headless-shell binary vs. full Chromium, `PLAYWRIGHT_BROWSERS_PATH`
-resolving under the wrong `$HOME` at Lambda runtime, missing
+went ahead and ran the probe anyway against a real AWS account, working
+through a chain of deploy-time bugs along the way (Playwright headless-shell
+binary vs. full Chromium, `PLAYWRIGHT_BROWSERS_PATH` resolving under the
+wrong `$HOME` at Lambda runtime, missing
 `--no-sandbox`/`--disable-gpu`/`--disable-dev-shm-usage`/`--single-process`
 launch flags — see git history on `feat/senate-lambda-akamai-probe` for each
-fix). Filing probed: `b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f`.
+fix). Filing probed: `b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f`, requested URL
+`https://efdsearch.senate.gov/search/view/ptr/b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f/`.
 
-Raw result:
+First attempt (predates `final_url`, `status_code` 200, `outcome`
+`"ambiguous"`, page titled `eFD: Home`) was genuinely inconclusive: a 200
+that isn't the filing page doesn't by itself prove a redirect happened.
+Rerun with `final_url` added settled it:
 
 ```json
 {
   "filing_id": "b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f",
   "status_code": 200,
   "outcome": "ambiguous",
+  "final_url": "https://efdsearch.senate.gov/search/home/",
   "html_excerpt": "<title>eFD: Home</title> ..."
 }
 ```
 
-`status_code` is 200 (not the classic Akamai 403 confirmed live in #17/#23),
-but the page title is **`eFD: Home`**, not
-`senate_collect.py`'s confirmed-live cleared marker
-(`"eFD: Print Periodic Transaction Report"`) — the request did not land on
-the filing itself. `classify_probe_result` correctly calls this
-`"ambiguous"` rather than guessing: a 200 that isn't the filing page could
-mean an Akamai soft-block shaped as a redirect to the homepage (a different
-shape than the hard 403 block #17/#23 saw, but still a block), *or* some
-other non-Akamai redirect/gate unrelated to bot detection. This run's
-`ProbeResult` predates the `final_url` field (added right after, see
-`senate_akamai_probe.py`), so there's no direct proof a redirect actually
-happened rather than the URL itself just serving that content — that's
-exactly the missing signal a rerun now captures.
+`final_url` (`.../search/home/`) differs from the requested filing URL —
+**a redirect happened**. This is the decisive fact: `senate_collect.py`'s own
+confirmed-live comment (from #23) says a *cleared* request to this exact
+print-view URL pattern needs no session/agreement cookie and returns the
+filing's HTML directly, no redirect. #23's local-network probe got the
+filing; this Lambda-origin probe got bounced to the site's homepage instead.
 
-**Not yet settled.** Next step: rerun with the current probe code (`git pull`,
-`./scripts/deploy-senate-akamai-probe.sh up` to redeploy, then `invoke` again
-against the same or a fresh filing id) and record here:
+**Interpretation** (`classify_probe_result` still correctly reports
+`"ambiguous"` — it only reads `status_code`/`html`, not `final_url`; this
+call is a human judgment, per #29's own ask): most likely a **bot/fingerprint
+soft-block**, not a session/agreement gate. Redirect-to-a-garden-page
+(rather than an explicit 403 "Access Denied") is a standard Akamai Bot
+Manager mitigation action, and #17's original note specifically flagged
+"cloud IP may hit the same Akamai 403" as the open risk this ticket exists
+to test — a redirect is a different *shape* of the same category of
+response, not evidence against it. Residual uncertainty: this wasn't
+re-verified against a fresh, contemporaneous local-network control (i.e.
+confirming #23's exact result still holds *today*, not just in #23's own
+run), so a site-side behavior change independent of Lambda vs. local-network
+can't be fully ruled out.
 
-- `final_url` — confirms whether a redirect happened and to where.
-- Outcome (`cleared` / `blocked_akamai` / `blocked_other` / `ambiguous`) and
-  HTTP status code.
-- If blocked: whether it looks like a hard block (consistent across retries,
-  matches Akamai's known block-page shape) or something workaroundable
-  (rate-limit-shaped, intermittent, or a different failure mode entirely).
-- Date run and which AWS region/account the Lambda egress IP came from.
+**Hard block or workaroundable?** Unknown from a single run — this result
+answers "does it clear the same way" (no), not "is it beatable with more
+effort." Worth trying before writing off Playwright-in-Lambda entirely:
+driving the full agreement flow (visit `/search/home/`, accept the terms,
+carry the resulting session cookie into the filing request) the way a real
+browser user would, since #23's "no cookie required" finding was itself
+conditional on already clearing Akamai — an unclearing Lambda IP might
+behave differently with a real session versus none. Until tried, treat this
+as inconclusive-toward-hard-block, not confirmed-hard-block.
 
-That result is what unblocks #28's design decision (manual-only vs.
-headless-browser automation step) from "contingent, unverified" to settled.
+**Feeds into #28**: as of this result, a headless-browser collection step
+inside the cloud pipeline is **not validated as viable** — #18's original
+manual-only posture stands unless/until either the cookie-flow workaround
+above is tried and clears, or the block is otherwise shown to be
+inconsistent/workaroundable rather than a hard per-IP-range block.
