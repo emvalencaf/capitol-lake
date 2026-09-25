@@ -1,0 +1,4 @@
+# Copy to backend.hcl (gitignored) and fill in from `infra/bootstrap`'s
+# outputs, then run: terraform init -backend-config=backend.hcl
+bucket = "capitol-lake-terraform-state"
+region = "us-east-1"

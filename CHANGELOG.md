@@ -9,6 +9,28 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- Terraform core infra (#44), wiring `infra/modules/lambda-stage` (#43) into
+  a deployable root stack per ADR-0009/ADR-0011: `infra/bootstrap` (one-time,
+  local-state S3 state-bucket bootstrap), `infra/modules/storage`
+  (bronze/silver buckets), `infra/modules/pipeline` (ECR repositories, IAM
+  roles/policies, SSM `SecureString` secret parameters, and the three
+  `lambda-stage` instances — `house-collect`, `senate-collect`, `extract`),
+  `infra/modules/scheduling` (House's EventBridge schedule end-to-end;
+  Senate's `bronze/senate/`-prefixed S3-event trigger straight into
+  `extract`, scoped to avoid double-processing House filings, which already
+  chain via SQS), and a root module composing all four. State uses S3-native
+  locking, no DynamoDB. ADR 0012 records the wiring decisions this needed
+  beyond ADR-0009/ADR-0011 (bucket naming, the SSM secret handoff shape,
+  S3-event scoping, and the static-year schedule input) and what's
+  deliberately left for follow-up (populating secrets, pushing images,
+  wiring `extract_handler.py` to actually read SSM at runtime).
+  `infra/modules/lambda-stage` gained a `function_name` output the
+  scheduling module's `aws_lambda_permission` resources need.
+  `terraform validate` is clean for the root module and `infra/bootstrap`;
+  `terraform plan` was verified as far as possible without a real AWS
+  account (passes all config/schema checks, fails only at the provider's own
+  `sts:GetCallerIdentity` call against a fake credential). FinOps (#45) and
+  the CI/CD OIDC apply workflow (#46) are separate, later tickets.
 - Orchestration: Lambda handlers wired to an SQS chain, plus the extraction
   stage's container image (#43), implementing the shape #18 settled.
   `src/capitol_lake/stages/orchestration.py`'s `bronze_keys_from_event` is
