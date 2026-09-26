@@ -117,6 +117,19 @@ ticker resolution API keys) is a separate, manual post-apply step — see
 
 ## Notes
 
+- **Fresh-account concurrency quota.** Each of the 4 stage Lambdas reserves
+  `var.stage_reserved_concurrency` (default 5, ADR reasoning in
+  `variables.tf`) — 20 total. AWS always keeps at least 10 units unreserved
+  account-wide, so if the account's Lambda concurrent-executions quota is
+  below ~30 (common on a brand-new account before it's requested an
+  increase), `terraform apply` fails on every stage with "decreases
+  account's UnreservedConcurrentExecution below its minimum value of [10]".
+  Check the quota with `aws lambda get-account-settings --query
+  AccountLimit`; either request a Service Quotas increase for "Concurrent
+  executions", or unblock the first apply with
+  `-var="stage_reserved_concurrency=-1"` (or
+  `TF_VAR_stage_reserved_concurrency=-1`, which `scripts/deploy-infra.sh`
+  also picks up) until the quota is raised.
 - State locking is native S3 (`use_lockfile = true`, Terraform >= 1.10) — no
   DynamoDB table (ADR-0009).
 - Secrets (LLM fallback / ticker resolution API keys) are SSM `SecureString`

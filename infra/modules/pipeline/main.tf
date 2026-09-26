@@ -161,8 +161,9 @@ module "extract" {
   image_uri = "${aws_ecr_repository.this["extract"].repository_url}:latest"
   role_arn  = aws_iam_role.this["extract"].arn
 
-  handler_timeout_seconds = 120
-  memory_mb               = 1024
+  handler_timeout_seconds        = 120
+  memory_mb                      = 1024
+  reserved_concurrent_executions = var.stage_reserved_concurrency
 
   # Slower retry backoff, not more retries: extract's failures here are
   # external rate-limiting (OpenFIGI/EDGAR/LLM provider), not bugs
@@ -204,6 +205,8 @@ module "house_collect" {
   role_arn    = aws_iam_role.this["house-collect"].arn
   sqs_trigger = false # EventBridge-scheduled, not SQS-triggered (infra/modules/scheduling)
 
+  reserved_concurrent_executions = var.stage_reserved_concurrency
+
   environment_variables = {
     BRONZE_BUCKET     = var.bronze_bucket_name
     EXTRACT_QUEUE_URL = module.extract.queue_url
@@ -235,6 +238,8 @@ module "senate_collect" {
   role_arn    = aws_iam_role.this["senate-collect"].arn
   sqs_trigger = false # manual/local invocation only (#18); no schedule, no queue
 
+  reserved_concurrent_executions = var.stage_reserved_concurrency
+
   environment_variables = {
     BRONZE_BUCKET = var.bronze_bucket_name
   }
@@ -254,8 +259,9 @@ module "senate_collect_automated" {
   # flow, not the stdlib-only stages above: 2048MB, and a timeout at
   # Lambda's ceiling since a worst-case full run (~300 filings at ~1 req/s)
   # approaches 900s, though most days finish well under (#69).
-  memory_mb               = 2048
-  handler_timeout_seconds = 900
+  memory_mb                      = 2048
+  handler_timeout_seconds        = 900
+  reserved_concurrent_executions = var.stage_reserved_concurrency
 
   environment_variables = {
     BRONZE_BUCKET = var.bronze_bucket_name

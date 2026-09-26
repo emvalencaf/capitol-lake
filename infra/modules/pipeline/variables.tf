@@ -26,6 +26,12 @@ variable "llm_fallback_provider" {
   default     = "lm_studio"
 }
 
+variable "stage_reserved_concurrency" {
+  description = "Reserved concurrency applied to each of the 4 stage Lambdas (see root variables.tf for the full rationale and the fresh-account quota gotcha)."
+  type        = number
+  default     = 5
+}
+
 variable "tags" {
   description = "Tags merged onto every resource this module creates (common_tags from the root module, per ADR-0009)."
   type        = map(string)

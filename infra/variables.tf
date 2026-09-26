@@ -62,6 +62,27 @@ variable "llm_fallback_provider" {
   default     = "lm_studio"
 }
 
+variable "stage_reserved_concurrency" {
+  description = <<-EOT
+    Reserved concurrency applied to each of the 4 pipeline stage Lambdas
+    (#43: capped low by default to stay polite to downstream free-tier APIs
+    and isolate per-filing failures). `-1` (Terraform's "unset" sentinel)
+    leaves every stage unreserved.
+
+    A fresh AWS account's default Lambda concurrent-executions quota can be
+    well under the account-wide 10-unit unreserved floor AWS always keeps
+    aside, in which case `terraform apply` fails with
+    "decreases account's UnreservedConcurrentExecution below its minimum
+    value of [10]" for every stage. Check the account's quota
+    (`aws lambda get-account-settings --query AccountLimit`) and either
+    request a Service Quotas increase for "Concurrent executions", or pass
+    `-var="stage_reserved_concurrency=-1"` (or `TF_VAR_stage_reserved_concurrency=-1`)
+    to unblock the first apply until the quota is raised.
+  EOT
+  type        = number
+  default     = 5
+}
+
 variable "house_filing_year" {
   description = <<-EOT
     Year passed to the scheduled House collector's event input

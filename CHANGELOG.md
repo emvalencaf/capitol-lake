@@ -9,6 +9,16 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- `infra`: new `var.stage_reserved_concurrency` (root and `modules/pipeline`,
+  default 5, matching the prior hardcoded per-stage default) makes each
+  stage Lambda's reserved concurrency overridable. Needed because a fresh
+  AWS account's default Lambda concurrent-executions quota can sit below
+  the ~30 units required to reserve 5 apiece across the 4 stages while
+  keeping AWS's mandatory 10-unit unreserved floor, which otherwise fails
+  every stage's `terraform apply` with "decreases account's
+  UnreservedConcurrentExecution below its minimum value of [10]".
+  `infra/README.md` documents the quota check and the
+  `-var="stage_reserved_concurrency=-1"` workaround.
 - `scripts/deploy-infra.sh`: automates the main stack's first-deploy
   chicken-and-egg problem — every pipeline Lambda points at
   `<its ECR repo>:latest`, which doesn't exist until an image is pushed, so a
