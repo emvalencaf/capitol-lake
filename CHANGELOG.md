@@ -9,6 +9,22 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- Senate eFD PTR search-and-fetch session (#67): `capitol_lake.browser.senate_efd_session`
+  drives one authenticated Playwright session through the full flow —
+  warm-up navigation, the `prohibition_agreement` gate accepted via a real
+  click, the PTR search form submitted for a 7-day lookback window, the
+  resulting DataTables JSON routed through `parse_senate_index`, up to 300
+  `/ptr/` filings fetched via real page navigations in the same session
+  and written through `bronze_write`. Any response other than `"cleared"`
+  (the search response or a filing fetch) raises `SenateEfdBlockedError`
+  immediately, with enough context to diagnose from a log; filings already
+  written before that stay written. `classify_probe_result` moved here
+  permanently from `capitol_lake.probes.senate_akamai_probe` (re-exported
+  there unchanged) alongside the new `classify_search_response` for the
+  search endpoint's own JSON. Pure-mechanics layer only — no Lambda
+  handler, no infra, no Docker yet. Hand-tested against the live site; see
+  `docs/research/senate-efd-session-hand-test.md`. Feeds #28's Senate
+  collector automation.
 - Senate-Akamai Lambda-egress probe (#29, run and resolved — **result:
   PASS**): `capitol_lake.probes.senate_akamai_probe` drives one real
   headless-Playwright request (warm-up navigation, the site's own

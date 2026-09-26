@@ -107,6 +107,20 @@ against fakes with no live network call and no MinIO; only
 real `boto3` S3 client — which only succeeds where the Akamai check passes
 (a plain `urllib` request does not; see above).
 
+`src/capitol_lake/browser/senate_efd_session.py` (#67) is the automated
+alternative #28 resolved on: `run_senate_efd_session` drives one
+authenticated Playwright session through the entire flow itself — warm-up,
+agreement gate, PTR search form for a 7-day lookback window, then reuses
+`parse_senate_index`/`bronze_write`/`RateLimiter` exactly as above — instead
+of a human capturing the DataTables response by hand first. It classifies
+every response it depends on (reaching the search form, the search response
+itself, each filing fetch) via `classify_probe_result`/
+`classify_search_response` (moved here permanently from
+`probes/senate_akamai_probe.py`, #29's throwaway probe) and raises
+immediately on anything but `"cleared"`. Pure-mechanics layer only so far —
+no Lambda handler, no schedule, no infra yet (later tickets); see
+`docs/research/senate-efd-session-hand-test.md` for a hand-test result.
+
 ## Orchestration: SQS chain and stage-to-stage handoff (#43)
 
 Per the shape #18 settled, stages are chained via SQS carrying only S3-key
