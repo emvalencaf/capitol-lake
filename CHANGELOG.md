@@ -9,6 +9,12 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- `scripts/invoke-collectors.sh`: manually invokes `capitol-lake-house-collect`
+  and/or `capitol-lake-senate-collect-automated` (normally
+  EventBridge-scheduled on `rate(1 day)`, so a fresh deploy's first real run
+  is otherwise up to 24h away) — prints the invoke result, tails recent
+  CloudWatch logs, and lists what landed under the Bronze bucket's
+  `bronze/house/`/`bronze/senate/` prefixes.
 - `infra`: new `var.stage_reserved_concurrency` (root and `modules/pipeline`,
   default `-1`, i.e. unreserved) makes each stage Lambda's reserved
   concurrency overridable, and changes the default from the prior hardcoded
