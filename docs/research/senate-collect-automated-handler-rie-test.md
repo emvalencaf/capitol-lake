@@ -57,3 +57,34 @@ handler plumbing, not the live Akamai outcome, which #67 already owns):
 A future run from a network #23/#29 already confirmed clears the check
 should show a real `"written"`/`"noop"` result and real bronze objects in
 MinIO, the same way #67's own follow-up note describes.
+
+## Update: the block was never about network origin
+
+**This section's own conclusion above was wrong.** The 403 traced to a
+fingerprint signal in the automated launch, independent of network origin —
+see `docs/research/senate-efd-session-hand-test.md`'s own "Update" section
+for the full four-way diagnostic (isolated with a throwaway script run
+directly against the live site, comparing this exact network/container
+against the Claude Code Playwright plugin's browser, which cleared the
+check on the very same request that just 403'd from this handler): the
+default headless Chromium UA's `HeadlessChrome` substring, not
+`navigator.webdriver`.
+
+With `browser.new_page()` passing `de_headless_user_agent(browser)` (added
+to `browser/senate_efd_session.py`, alongside
+`--disable-blink-features=AutomationControlled` kept in
+`LAMBDA_SAFE_CHROMIUM_LAUNCH_ARGS` as an unrelated precaution, not the fix
+itself), a rebuilt image and a fresh RIE invocation from this same sandbox,
+no network change at all, produced:
+
+```json
+{"years": [2026], "written":
+["bronze/senate/year=2026/028aef33-dc0d-44a1-992f-aa35ee42685b.html"],
+"noop": [], "filings_available": 1, "filings_processed": 1}
+```
+
+Verified directly in MinIO (`mc cat`): a real filing HTML body and its
+`.meta.json` sidecar (`source_url`, `sha256`, `fetched_at`, `kind: "ptr"`),
+written by the actual handler through the actual RIE endpoint against real
+MinIO — not a fake or a classification-only check. AC #3 is satisfied as
+originally scoped; no real-Lambda-egress-IP deploy is needed to prove it.

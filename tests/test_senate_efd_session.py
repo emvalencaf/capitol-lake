@@ -1,6 +1,7 @@
 import json
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -8,6 +9,7 @@ from capitol_lake.browser.senate_efd_session import (
     LOOKBACK_DAYS,
     classify_probe_result,
     classify_search_response,
+    de_headless_user_agent,
     filings_to_fetch,
     search_date_window,
 )
@@ -155,3 +157,18 @@ def test_filings_to_fetch_preserves_order():
         "filing-2",
         "filing-3",
     ]
+
+
+# ---------------------------------------------------------------------------
+# de_headless_user_agent (#68) — the "Headless" substring is the one
+# fingerprint signal confirmed by hand to matter to Akamai's check.
+# ---------------------------------------------------------------------------
+
+
+def test_de_headless_user_agent_drops_the_headless_substring():
+    browser = SimpleNamespace(version="131.0.6778.33")
+
+    ua = de_headless_user_agent(browser)
+
+    assert "Headless" not in ua
+    assert "Chrome/131.0.6778.33" in ua

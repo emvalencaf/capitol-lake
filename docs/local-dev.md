@@ -117,8 +117,12 @@ every response it depends on (reaching the search form, the search response
 itself, each filing fetch) via `classify_probe_result`/
 `classify_search_response` (moved here permanently from
 `probes/senate_akamai_probe.py`, #29's throwaway probe) and raises
-immediately on anything but `"cleared"`. See
-`docs/research/senate-efd-session-hand-test.md` for a hand-test result.
+immediately on anything but `"cleared"`. Clearing the check turned out to
+depend on a browser fingerprint signal, not network origin at all (#68, see
+`docs/research/senate-efd-session-hand-test.md`'s Update section):
+`run_senate_efd_session` passes `de_headless_user_agent(browser)` to
+`browser.new_page()`, stripping the default headless Chromium UA's
+`HeadlessChrome` substring — a real Lambda egress IP is not required.
 
 `handlers/senate_collect_automated_handler.py` (#68) is the thin Lambda
 adapter for that flow: unlike `senate_collect_handler.py`, it takes no
@@ -147,12 +151,13 @@ curl -XPOST "http://localhost:9104/2015-03-31/functions/function/invocations" \
   -d '{}'
 ```
 
-A run only succeeds where the Akamai check clears (see above); a blocked
+A run only succeeds where the Akamai check clears (see above) — a blocked
 run raises `SenateEfdBlockedError`, which the RIE endpoint reports as an
-invocation error rather than a bronze write — see
-`docs/research/senate-collect-automated-handler-rie-test.md` for what a run
-from this development sandbox's own network actually showed (blocked at
-warm-up, same as #67's hand test) and what it confirms regardless.
+invocation error rather than a bronze write. With both fingerprint fixes in
+place, a run from this development sandbox's own network wrote a real
+bronze object and its `.meta.json` sidecar, verified directly in MinIO; see
+`docs/research/senate-collect-automated-handler-rie-test.md` for the full
+result.
 
 ## Orchestration: SQS chain and stage-to-stage handoff (#43)
 
