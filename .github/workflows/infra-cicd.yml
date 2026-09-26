@@ -40,19 +40,19 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: terraform init
         run: |
           terraform init -input=false \
-            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
             -backend-config="region=${{ env.AWS_REGION }}"
 
       - name: terraform plan
         run: |
           terraform plan -input=false -lock-timeout=5m \
-            -var="finops_alert_email=${{ vars.FINOPS_ALERT_EMAIL }}"
+            -var="finops_alert_email=${{ secrets.FINOPS_ALERT_EMAIL }}"
 
   apply:
     name: Terraform apply
@@ -76,16 +76,16 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: terraform init
         run: |
           terraform init -input=false \
-            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
             -backend-config="region=${{ env.AWS_REGION }}"
 
       - name: terraform apply
         run: |
           terraform apply -input=false -auto-approve -lock-timeout=5m \
-            -var="finops_alert_email=${{ vars.FINOPS_ALERT_EMAIL }}"
+            -var="finops_alert_email=${{ secrets.FINOPS_ALERT_EMAIL }}"

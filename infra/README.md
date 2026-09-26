@@ -36,7 +36,7 @@ cd infra/bootstrap
 terraform init
 terraform apply
 terraform output state_bucket_name       # feed into backend.hcl below
-terraform output github_actions_role_arn # feed into the AWS_ROLE_ARN repo variable below
+terraform output github_actions_role_arn # feed into the AWS_ROLE_ARN repo secret below
 ```
 
 This creates the S3 state bucket, the GitHub Actions OIDC provider, and the
@@ -69,9 +69,11 @@ hand.
   protection rules**. This Environment is what actually gates `apply` — the
   workflow file just references it by name. Its name must match
   `var.github_environment` in `infra/bootstrap` (default `production`).
-- Set these as repository **variables** (Settings > Secrets and variables >
-  Actions > Variables tab — not Secrets; none of these grant AWS access on
-  their own without the OIDC trust condition):
+- Set these as repository **secrets** (Settings > Secrets and variables >
+  Actions > Secrets tab — not Variables; none of these grant AWS access on
+  their own without the OIDC trust condition, but they're kept as secrets
+  rather than plaintext variables so GitHub masks them in Actions logs —
+  worth doing given this repo's public Phase 3 future, ADR-0009):
   - `AWS_ROLE_ARN` — `infra/bootstrap`'s `github_actions_role_arn` output.
   - `TF_STATE_BUCKET` — `infra/bootstrap`'s `state_bucket_name` output.
   - `FINOPS_ALERT_EMAIL` — same value as `var.finops_alert_email` above; this
@@ -81,8 +83,9 @@ hand.
 ### 3. What CI does (`.github/workflows/infra-cicd.yml`)
 
 - **Pull requests touching `infra/**`, into `development` or `master`** run
-  the `plan` job: OIDC auth via `AWS_ROLE_ARN`, `terraform init` against the
-  `TF_STATE_BUCKET` backend, then `terraform plan`. No Environment gate —
+  the `plan` job: OIDC auth via the `AWS_ROLE_ARN` secret, `terraform init`
+  against the `TF_STATE_BUCKET` secret's backend, then `terraform plan`. No
+  Environment gate —
   read-only against the real state, output visible in the PR's Actions run
   log (Terraform posts no PR comment; there's no comment-posting step in the
   workflow).
