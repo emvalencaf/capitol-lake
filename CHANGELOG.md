@@ -7,8 +7,56 @@ heading when `development` is released to `master`.
 
 ## [Unreleased]
 
+### Fixed
+
+- `infra`: `house-collect`'s Lambda timeout was left at the `lambda-stage`
+  default (60s), which times out mid-run (`Sandbox.Timedout`) on a
+  full-year backfill — confirmed via `scripts/invoke-collectors.sh house`:
+  it wrote 5 filings to Bronze in the 60s window before hitting the limit,
+  against a ~500 filings/year backlog (`docs/cost.md`) at roughly 1/s.
+  Bumped to 900s (Lambda's ceiling, matching `senate-collect-automated`'s
+  existing timeout) — day-to-day runs against the daily schedule's small
+  trickle of new filings finish in well under that.
+- `infra`: `house-collect`/`senate-collect`/`senate-collect-automated`'s IAM
+  role was missing `s3:ListBucket` on the Bronze bucket (only had
+  `GetObject`/`PutObject` scoped to `bronze/*`). Each collector's
+  idempotent-skip check GetObjects a meta key that legitimately doesn't
+  exist yet on a filing's first run; without `ListBucket`, S3 can't
+  distinguish that caller from one probing for the key's existence, so it
+  returns 403 `AccessDenied` instead of 404 `NoSuchKey` — failing every
+  first invocation. Added a `BronzeList` statement granting `ListBucket` on
+  the bucket itself (not `/*`) to the 3 collector roles.
+
 ### Added
 
+- `scripts/invoke-collectors.sh`: manually invokes `capitol-lake-house-collect`
+  and/or `capitol-lake-senate-collect-automated` (normally
+  EventBridge-scheduled on `rate(1 day)`, so a fresh deploy's first real run
+  is otherwise up to 24h away) — prints the invoke result, tails recent
+  CloudWatch logs, and lists what landed under the Bronze bucket's
+  `bronze/house/`/`bronze/senate/` prefixes.
+- `infra`: new `var.stage_reserved_concurrency` (root and `modules/pipeline`,
+  default `-1`, i.e. unreserved) makes each stage Lambda's reserved
+  concurrency overridable, and changes the default from the prior hardcoded
+  5-per-stage to unreserved, matching this project's demonstrative scope. A
+  fresh AWS account's default Lambda concurrent-executions quota can sit
+  below the ~30 units 4 stages at 5 apiece would need while keeping AWS's
+  mandatory 10-unit unreserved floor, which fails every stage's `terraform
+  apply` with "decreases account's UnreservedConcurrentExecution below its
+  minimum value of [10]" unless a Service Quotas increase is requested
+  first — `infra/README.md` documents this and how to opt back into
+  reserved concurrency (`stage_reserved_concurrency = 5`) if this ever
+  carries real production traffic.
+- `scripts/deploy-infra.sh`: automates the main stack's first-deploy
+  chicken-and-egg problem — every pipeline Lambda points at
+  `<its ECR repo>:latest`, which doesn't exist until an image is pushed, so a
+  plain `terraform apply` on a fresh account fails with "Provide a valid
+  source image." The script applies the ECR repos only, builds and pushes
+  each of the 4 stages' images, applies the rest of the stack, then forces
+  each Lambda onto the just-pushed image (working around `:latest` not
+  registering as a Terraform diff) — the same dance
+  `scripts/deploy-senate-akamai-probe.sh` already automated for the
+  standalone probe Lambda. `infra/README.md` updated to reference it.
 - Root README: links from About The Project, Getting Started, and Usage to
   `docs/architecture.md`, `docs/cost.md`, `docs/metrics.md`, and
   `infra/README.md`. No new top-level section; existing structure, the

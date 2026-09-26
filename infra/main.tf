@@ -18,9 +18,10 @@ module "pipeline" {
   silver_bucket_name = module.storage.silver_bucket_name
   silver_bucket_arn  = module.storage.silver_bucket_arn
 
-  ecr_repo_prefix       = var.ecr_repo_prefix
-  llm_fallback_provider = var.llm_fallback_provider
-  tags                  = var.common_tags
+  ecr_repo_prefix            = var.ecr_repo_prefix
+  llm_fallback_provider      = var.llm_fallback_provider
+  stage_reserved_concurrency = var.stage_reserved_concurrency
+  tags                       = var.common_tags
 }
 
 module "scheduling" {
