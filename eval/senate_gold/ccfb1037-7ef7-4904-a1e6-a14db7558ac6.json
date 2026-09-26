@@ -1,0 +1,35 @@
+{
+  "doc_id": "ccfb1037-7ef7-4904-a1e6-a14db7558ac6",
+  "kind": "html",
+  "year": 2022,
+  "transactions": [
+    {
+      "line_no": 2,
+      "owner": "spouse",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Ardagh Metal Packaging S.A. Ordinary Shares",
+      "transaction_date": "2022-06-06",
+      "value_min": 50001.0,
+      "value_max": 100000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 1,
+      "owner": "spouse",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "KH",
+      "transaction_date": "2022-06-06",
+      "value_min": 15001.0,
+      "value_max": 50000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}

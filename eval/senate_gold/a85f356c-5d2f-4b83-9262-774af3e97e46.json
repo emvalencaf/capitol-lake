@@ -1,0 +1,35 @@
+{
+  "doc_id": "a85f356c-5d2f-4b83-9262-774af3e97e46",
+  "kind": "html",
+  "year": 2023,
+  "transactions": [
+    {
+      "line_no": 2,
+      "owner": "self",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "First Trust Europe AlphaDEX Fund",
+      "transaction_date": "2023-08-29",
+      "value_min": 15001.0,
+      "value_max": 50000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 1,
+      "owner": "self",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "JPM Betabuilders Europe ETF",
+      "transaction_date": "2023-08-29",
+      "value_min": 15001.0,
+      "value_max": 50000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}

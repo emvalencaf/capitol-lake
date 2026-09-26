@@ -18,6 +18,10 @@ _Avoid_: Report, disclosure (when meaning a single document)
 One line of a Filing describing a single purchase, sale or exchange of an asset.
 _Avoid_: Trade, row, record
 
+**Exchange**:
+A Transaction in which one asset is given up and a different asset is received in the same reported line, rather than a simple purchase or sale. The asset given up is the Transaction's asset; the asset received is recorded separately and never treated as its own Transaction.
+_Avoid_: Swap, trade-in
+
 **Owner**:
 Whose account the Transaction belongs to: the member, their spouse, jointly, or a dependent child.
 _Avoid_: Holder, beneficiary
@@ -37,7 +41,7 @@ _Avoid_: Image filing, OCR filing
 ### Dates
 
 **Notification date**:
-The date the member was notified of the Transaction, as printed on the Filing line.
+The date the member was notified of the Transaction, when the Filing states it. Not every Filing states it structurally: it is a printed field on the Filing line, but may instead surface only inside free-text remarks, or not at all.
 _Avoid_: Disclosure date
 
 **Disclosure lag**:

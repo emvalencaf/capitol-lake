@@ -17,7 +17,11 @@ import pytest
 from capitol_lake.keys import UnrecognizedBronzeKeyError
 from capitol_lake.schema import AssetType
 from capitol_lake.stages import extract as extract_module
-from capitol_lake.stages.extract import DocIdMismatchError, extract_house_filing
+from capitol_lake.stages.extract import (
+    DocIdMismatchError,
+    extract_house_filing,
+    extract_senate_filing,
+)
 from capitol_lake.stages.house_collect import UnknownDocIdPrefixError
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -220,3 +224,88 @@ def test_no_resolve_ticker_argument_performs_no_resolution():
     # Same rows as every other test above that omits resolve_ticker: nothing
     # about the fixture's own tickers changes when no cascade is wired in.
     assert table.num_rows == 2
+
+
+# ---------------------------------------------------------------------------
+# extract_senate_filing
+# ---------------------------------------------------------------------------
+
+SENATE_BRONZE_KEY = "bronze/senate/year=2026/11111111-1111-1111-1111-111111111111.html"
+
+
+def _senate_html_bytes():
+    return (FIXTURES / "senate_ptr_sample.html").read_bytes()
+
+
+def test_senate_filing_is_always_kind_html_and_writes_silver_keys():
+    result = extract_senate_filing(_senate_html_bytes(), bronze_key=SENATE_BRONZE_KEY)
+
+    assert result["kind"] == "html"
+    assert result["filings"]["key"] == (
+        "silver/filings/chamber=senate/year=2026/part-11111111-1111-1111-1111-111111111111.parquet"
+    )
+    assert result["transactions"]["key"] == (
+        "silver/transactions/chamber=senate/year=2026/"
+        "part-11111111-1111-1111-1111-111111111111.parquet"
+    )
+
+
+def test_senate_malformed_bronze_key_is_rejected():
+    with pytest.raises(UnrecognizedBronzeKeyError):
+        extract_senate_filing(b"", bronze_key="not-a-bronze-key")
+
+
+def test_senate_filings_parquet_is_queryable_with_the_filing_metadata():
+    result = extract_senate_filing(_senate_html_bytes(), bronze_key=SENATE_BRONZE_KEY)
+
+    table = _read_parquet(result["filings"]["bytes"])
+    assert table.num_rows == 1
+    row = table.to_pylist()[0]
+    assert row["doc_id"] == "11111111-1111-1111-1111-111111111111"
+    assert row["chamber"] == "senate"
+    assert row["filer_name"] == "Alan Armstrong"
+    assert row["bronze_key"] == SENATE_BRONZE_KEY
+
+
+def test_senate_transactions_parquet_always_carries_asset_type_and_description():
+    result = extract_senate_filing(_senate_html_bytes(), bronze_key=SENATE_BRONZE_KEY)
+
+    table = _read_parquet(result["transactions"]["bytes"])
+    assert table.num_rows == 4
+    for row in table.to_pylist():
+        assert row["asset_type"]
+        assert row["asset_description"]
+        assert row["doc_id"] == "11111111-1111-1111-1111-111111111111"
+
+
+def test_senate_resolve_ticker_fills_only_still_null_stock_rows():
+    # The sample's two option rows already have a printed ticker (WMB) and
+    # are Stock Option, not Stock/ETF, so neither is a candidate. Its Sale
+    # and Exchange rows are Stock with no printed ticker ("--") - only those
+    # two are still-null stock/ETF rows resolve_ticker must be asked about.
+    calls: list[tuple[str, AssetType]] = []
+
+    def _resolve_ticker(asset_description: str, asset_type: AssetType) -> str | None:
+        calls.append((asset_description, asset_type))
+        return "RESOLVED"
+
+    result = extract_senate_filing(
+        _senate_html_bytes(), bronze_key=SENATE_BRONZE_KEY, resolve_ticker=_resolve_ticker
+    )
+
+    assert calls == [
+        ("Electronic Arts Inc. (EA)", AssetType.STOCK),
+        ("AvalonBay Communities, Inc. Common Stock (AVB) (Exchanged)", AssetType.STOCK),
+    ]
+    table = _read_parquet(result["transactions"]["bytes"])
+    rows = {row["asset_description"]: row["ticker"] for row in table.to_pylist()}
+    assert rows["Electronic Arts Inc. (EA)"] == "RESOLVED"
+    assert rows["Williams Companies, Inc. (The) Common Stock"] == "WMB"
+
+
+def test_senate_no_resolve_ticker_argument_performs_no_resolution():
+    result = extract_senate_filing(_senate_html_bytes(), bronze_key=SENATE_BRONZE_KEY)
+
+    table = _read_parquet(result["transactions"]["bytes"])
+    tickers = {row["asset_description"]: row["ticker"] for row in table.to_pylist()}
+    assert tickers["Electronic Arts Inc. (EA)"] is None

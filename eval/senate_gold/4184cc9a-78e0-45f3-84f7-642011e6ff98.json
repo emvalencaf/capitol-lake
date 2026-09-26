@@ -1,0 +1,91 @@
+{
+  "doc_id": "4184cc9a-78e0-45f3-84f7-642011e6ff98",
+  "kind": "html",
+  "year": 2026,
+  "transactions": [
+    {
+      "line_no": 6,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Aptiv PLC Ordinary Shares",
+      "transaction_date": "2026-07-09",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 5,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "PayPal Holdings, Inc. - Common Stock",
+      "transaction_date": "2026-07-30",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 4,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Tradr 2X Long SPY Monthly ETF",
+      "transaction_date": "2026-07-23",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 3,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Estee Lauder Companies, Inc. (The) Common Stock",
+      "transaction_date": "2026-07-02",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Chevron Corporation Common Stock",
+      "transaction_date": "2026-07-02",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 1,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Tradr 2X Long SPY Monthly ETF",
+      "transaction_date": "2026-07-02",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}

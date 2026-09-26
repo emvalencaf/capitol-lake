@@ -1,0 +1,21 @@
+{
+  "doc_id": "3d1b3c85-7b41-4183-89d6-aec3600db2a1",
+  "kind": "html",
+  "year": 2022,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "self",
+      "transaction_type": "purchase",
+      "asset_type": "other",
+      "asset_description": "More",
+      "transaction_date": "2022-10-04",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": "Company: More (Ebene, Muritius (India)) Description: Grocery Chain"
+    }
+  ]
+}

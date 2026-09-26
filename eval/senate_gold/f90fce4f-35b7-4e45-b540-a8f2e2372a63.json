@@ -1,0 +1,21 @@
+{
+  "doc_id": "f90fce4f-35b7-4e45-b540-a8f2e2372a63",
+  "kind": "html",
+  "year": 2025,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "joint",
+      "transaction_type": "sale_full",
+      "asset_type": "other",
+      "asset_description": "Yum! Brands",
+      "transaction_date": "2025-02-18",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": "Company: Yum (Louisville, KY) Description: Food"
+    }
+  ]
+}
