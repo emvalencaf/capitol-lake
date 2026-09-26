@@ -15,6 +15,11 @@
 # to us-east-1 (matching infra/variables.tf); override with AWS_REGION.
 set -euo pipefail
 
+# The AWS CLI v2 pages every command's stdout through `less` by default on
+# an interactive terminal, which blocks this script mid-run waiting for a
+# keypress (e.g. right after `aws lambda invoke` prints its status JSON).
+export AWS_PAGER=""
+
 root="$(git rev-parse --show-toplevel)"
 infra_dir="$root/infra"
 region="${AWS_REGION:-us-east-1}"
@@ -47,9 +52,13 @@ bronze_bucket="$(tf output -raw bronze_bucket_name)"
 
 show_result() {
   local out_file="$1"
+  local invoke_status="$2"
   echo "==> result:"
   cat "$out_file"
   echo
+  if grep -q '"FunctionError"' <<<"$invoke_status"; then
+    echo "==> FUNCTION ERROR — the Lambda ran but raised an exception (see payload above and the logs below)"
+  fi
 }
 
 tail_logs() {
@@ -74,14 +83,15 @@ invoke_house() {
   trap 'rm -f "$out_file"' RETURN
 
   echo "==> invoking $function_name (year=$year)"
-  aws lambda invoke \
+  local invoke_status
+  invoke_status="$(aws lambda invoke \
     --function-name "$function_name" \
     --region "$region" \
     --payload "{\"year\": ${year}}" \
     --cli-binary-format raw-in-base64-out \
-    "$out_file"
+    "$out_file")"
 
-  show_result "$out_file"
+  show_result "$out_file" "$invoke_status"
   tail_logs "$function_name"
   list_bronze "bronze/house/"
 }
@@ -93,12 +103,13 @@ invoke_senate() {
   trap 'rm -f "$out_file"' RETURN
 
   echo "==> invoking $function_name (no payload; a real headless-browser session, can take up to 15 minutes)"
-  aws lambda invoke \
+  local invoke_status
+  invoke_status="$(aws lambda invoke \
     --function-name "$function_name" \
     --region "$region" \
-    "$out_file"
+    "$out_file")"
 
-  show_result "$out_file"
+  show_result "$out_file" "$invoke_status"
   tail_logs "$function_name"
   list_bronze "bronze/senate/"
 }
