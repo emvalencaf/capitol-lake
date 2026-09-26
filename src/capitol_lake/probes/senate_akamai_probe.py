@@ -32,62 +32,44 @@ of Akamai's bot/fingerprint check. `run_probe` now also checks that checkbox
 and submits the form before requesting the filing, matching the site's
 actual access flow rather than assuming a bare page load is enough.
 
-Only `classify_probe_result` is a pure function and unit-tested; `run_probe`
-drives a real Playwright browser against the live site and is exercised by
-hand, the same convention `handlers/*_handler.py` follows for real network
-calls.
+`classify_probe_result` moved permanently to
+`capitol_lake.browser.senate_efd_session` (#67, the module that now drives
+the full authenticated flow this probe only ever answered one question
+about) and is re-exported here unchanged so this probe's own call site and
+any existing caller keep working. Only that function is a pure,
+unit-tested one; `run_probe` drives a real Playwright browser against the
+live site and is exercised by hand, the same convention
+`handlers/*_handler.py` follows for real network calls.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
 
-# Confirmed live (#23, docs/local-dev.md): a cleared request lands on the
-# filing's own print view, titled exactly this.
-CLEARED_TITLE_MARKER = "eFD: Print Periodic Transaction Report"
+from capitol_lake.browser.senate_efd_session import (
+    CLEARED_FILING_TITLE_MARKER as CLEARED_TITLE_MARKER,
+)
+from capitol_lake.browser.senate_efd_session import (
+    LAMBDA_SAFE_CHROMIUM_LAUNCH_ARGS,
+    classify_probe_result,
+)
+from capitol_lake.browser.senate_efd_session import (
+    ResponseOutcome as ProbeOutcome,
+)
+
+__all__ = [
+    "CLEARED_TITLE_MARKER",
+    "SENATE_HOME_URL",
+    "ProbeOutcome",
+    "ProbeResult",
+    "classify_probe_result",
+    "run_probe",
+]
 
 # #23's own probe target — visited first (see module docstring) so the
 # browser has a normal navigation history/session before requesting a
 # filing, same as every real local run this repo has on record.
 SENATE_HOME_URL = "https://efdsearch.senate.gov/search/home/"
-
-# Akamai's own block page (Bot Manager / Kona Site Defender default) always
-# carries one of these — a "Reference #<digits>.<hex>" incident id and/or the
-# literal "Access Denied" heading. Either alone is enough to call it Akamai,
-# distinct from some other, non-Akamai failure (timeout, 5xx, DNS).
-_AKAMAI_MARKERS = ("Access Denied", "Reference #")
-
-ProbeOutcome = Literal["cleared", "blocked_akamai", "blocked_other", "ambiguous"]
-
-
-def classify_probe_result(status_code: int, html: str) -> ProbeOutcome:
-    """Classify one fetched `/ptr/` response as cleared, blocked, or ambiguous.
-
-    - `"cleared"`: HTTP 200 and the page is the actual filing print view
-      (`CLEARED_TITLE_MARKER` in the title) — the Akamai check passed.
-    - `"blocked_akamai"`: HTTP 403 with an Akamai block-page marker present,
-      or HTTP 403 with an empty/near-empty body (Akamai's block sometimes
-      serves no HTML at all, just the status) — matches #17/#23's prior
-      confirmed-live Akamai 403 shape.
-    - `"blocked_other"`: any other non-200 status, or a 200 that isn't the
-      filing page (e.g. a login/agreement redirect target) — a real failure,
-      but not evidence either way about the Akamai fingerprint check
-      specifically.
-    - `"ambiguous"`: 200 status but the body matches neither the cleared nor
-      a recognizable blocked shape — needs a human to look at the captured
-      HTML rather than trust an automatic classification.
-    """
-    if status_code == 200:
-        if CLEARED_TITLE_MARKER in html:
-            return "cleared"
-        return "ambiguous"
-    if status_code == 403:
-        stripped = html.strip()
-        if not stripped or any(marker in html for marker in _AKAMAI_MARKERS):
-            return "blocked_akamai"
-        return "blocked_other"
-    return "blocked_other"
 
 
 @dataclass(frozen=True)
@@ -156,25 +138,11 @@ def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
     url = url_template.format(filing_id=filing_id)
 
     with sync_playwright() as playwright:
-        # `channel="chromium"` forces the classic full-Chromium headless
-        # mode: Playwright >=1.45 defaults headless launches to a separate
-        # "Chromium Headless Shell" binary that a plain `playwright install
-        # chromium` (docker/senate_akamai_probe.Dockerfile) doesn't
-        # download, which fails with "Executable doesn't exist ...
-        # chromium_headless_shell..." otherwise.
-        # Lambda's container sandbox lacks Chromium's usual kernel sandbox
-        # capabilities, a GPU, and any meaningful /dev/shm size — launching
-        # without these flags is a well-documented failure mode there
-        # (microsoft/playwright#14023: prctl(PR_SET_NO_NEW_PRIVS) failures,
-        # GPU process crash-loops, eventual launch timeout).
+        # Same Lambda-safe launch shape `browser/senate_efd_session.py`
+        # shares this constant for — see its own comment for why each flag
+        # is needed.
         browser = playwright.chromium.launch(
-            channel="chromium",
-            args=[
-                "--no-sandbox",
-                "--disable-gpu",
-                "--disable-dev-shm-usage",
-                "--single-process",
-            ],
+            channel="chromium", args=LAMBDA_SAFE_CHROMIUM_LAUNCH_ARGS
         )
         try:
             page = browser.new_page()
