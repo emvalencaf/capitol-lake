@@ -86,6 +86,18 @@ data "aws_iam_policy_document" "collect_s3" {
     actions   = ["s3:GetObject", "s3:PutObject"]
     resources = ["${var.bronze_bucket_arn}/*"]
   }
+
+  # Each collector's idempotent-skip check (read_existing_sha256) GetObjects
+  # a meta key that legitimately doesn't exist yet on a filing's first run.
+  # Without s3:ListBucket on the bucket itself, S3 can't tell the caller
+  # apart from someone probing for the key's existence, so it returns 403
+  # AccessDenied instead of 404 NoSuchKey — this statement is what lets a
+  # missing key actually come back as "not found".
+  statement {
+    sid       = "BronzeList"
+    actions   = ["s3:ListBucket"]
+    resources = [var.bronze_bucket_arn]
+  }
 }
 
 data "aws_iam_policy_document" "extract_s3" {
@@ -161,8 +173,9 @@ module "extract" {
   image_uri = "${aws_ecr_repository.this["extract"].repository_url}:latest"
   role_arn  = aws_iam_role.this["extract"].arn
 
-  handler_timeout_seconds = 120
-  memory_mb               = 1024
+  handler_timeout_seconds        = 120
+  memory_mb                      = 1024
+  reserved_concurrent_executions = var.stage_reserved_concurrency
 
   # Slower retry backoff, not more retries: extract's failures here are
   # external rate-limiting (OpenFIGI/EDGAR/LLM provider), not bugs
@@ -204,6 +217,15 @@ module "house_collect" {
   role_arn    = aws_iam_role.this["house-collect"].arn
   sqs_trigger = false # EventBridge-scheduled, not SQS-triggered (infra/modules/scheduling)
 
+  # The lambda-stage default (60s) times out mid-run on a full-year backfill
+  # (~500 filings/year, docs/cost.md, at roughly 1/s): a first invocation
+  # against a filing year with a large backlog needs far more headroom than
+  # the day-to-day trickle of new filings the daily schedule normally sees.
+  # 900s matches Lambda's ceiling (and senate-collect-automated's own
+  # timeout below) rather than guessing a number in between.
+  handler_timeout_seconds        = 900
+  reserved_concurrent_executions = var.stage_reserved_concurrency
+
   environment_variables = {
     BRONZE_BUCKET     = var.bronze_bucket_name
     EXTRACT_QUEUE_URL = module.extract.queue_url
@@ -235,6 +257,8 @@ module "senate_collect" {
   role_arn    = aws_iam_role.this["senate-collect"].arn
   sqs_trigger = false # manual/local invocation only (#18); no schedule, no queue
 
+  reserved_concurrent_executions = var.stage_reserved_concurrency
+
   environment_variables = {
     BRONZE_BUCKET = var.bronze_bucket_name
   }
@@ -254,8 +278,9 @@ module "senate_collect_automated" {
   # flow, not the stdlib-only stages above: 2048MB, and a timeout at
   # Lambda's ceiling since a worst-case full run (~300 filings at ~1 req/s)
   # approaches 900s, though most days finish well under (#69).
-  memory_mb               = 2048
-  handler_timeout_seconds = 900
+  memory_mb                      = 2048
+  handler_timeout_seconds        = 900
+  reserved_concurrent_executions = var.stage_reserved_concurrency
 
   environment_variables = {
     BRONZE_BUCKET = var.bronze_bucket_name
