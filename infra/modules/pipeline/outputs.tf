@@ -14,6 +14,14 @@ output "senate_collect_function_arn" {
   value = module.senate_collect.function_arn
 }
 
+output "senate_collect_automated_function_name" {
+  value = module.senate_collect_automated.function_name
+}
+
+output "senate_collect_automated_function_arn" {
+  value = module.senate_collect_automated.function_arn
+}
+
 output "extract_function_name" {
   value = module.extract.function_name
 }

@@ -14,14 +14,15 @@
 # senate via the S3 event, see #18's resolution).
 
 locals {
-  stage_names = ["house-collect", "senate-collect", "extract"]
+  stage_names = ["house-collect", "senate-collect", "senate-collect-automated", "extract"]
 
   # Chamber override per stage (ADR-0010): only house-collect/senate-collect
   # are chamber-specific; extract processes both, so it keeps var.tags'
   # Chamber default ("n/a") rather than picking one.
   stage_chamber = {
-    "house-collect"  = "house"
-    "senate-collect" = "senate"
+    "house-collect"            = "house"
+    "senate-collect"           = "senate"
+    "senate-collect-automated" = "senate"
   }
 
   # Per-stage tags: var.tags + Stage, with the Chamber override above where
@@ -78,7 +79,7 @@ resource "aws_iam_role_policy_attachment" "logs" {
 # --- S3 access, scoped per stage's actual read/write shape ---
 
 data "aws_iam_policy_document" "collect_s3" {
-  for_each = toset(["house-collect", "senate-collect"])
+  for_each = toset(["house-collect", "senate-collect", "senate-collect-automated"])
 
   statement {
     sid       = "BronzeReadWrite"
@@ -102,7 +103,7 @@ data "aws_iam_policy_document" "extract_s3" {
 }
 
 resource "aws_iam_role_policy" "collect_s3" {
-  for_each = toset(["house-collect", "senate-collect"])
+  for_each = toset(["house-collect", "senate-collect", "senate-collect-automated"])
 
   name   = "s3-access"
   role   = aws_iam_role.this[each.value].id
@@ -239,4 +240,26 @@ module "senate_collect" {
   }
 
   tags = local.stage_tags["senate-collect"]
+}
+
+module "senate_collect_automated" {
+  source = "../lambda-stage"
+
+  name        = "senate-collect-automated"
+  image_uri   = "${aws_ecr_repository.this["senate-collect-automated"].repository_url}:latest"
+  role_arn    = aws_iam_role.this["senate-collect-automated"].arn
+  sqs_trigger = false # EventBridge-scheduled (infra/modules/scheduling); the bronze S3 event already chains into extract regardless of which Senate path wrote the object (#69)
+
+  # Sized for a real Chromium session driving #67's eFD search-and-fetch
+  # flow, not the stdlib-only stages above: 2048MB, and a timeout at
+  # Lambda's ceiling since a worst-case full run (~300 filings at ~1 req/s)
+  # approaches 900s, though most days finish well under (#69).
+  memory_mb               = 2048
+  handler_timeout_seconds = 900
+
+  environment_variables = {
+    BRONZE_BUCKET = var.bronze_bucket_name
+  }
+
+  tags = local.stage_tags["senate-collect-automated"]
 }

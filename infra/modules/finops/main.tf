@@ -104,3 +104,28 @@ resource "aws_cloudwatch_metric_alarm" "staleness" {
     }
   }
 }
+
+# Dedicated to `senate-collect-automated` (#69), distinct from the House-only
+# staleness alarm above: #67 raises on any non-"cleared" outcome, so a single
+# blocked/failed run should alert the same day rather than wait out a
+# multi-day zero-invocations window. `treat_missing_data = "notBreaching"`
+# (unlike staleness) since a short period with zero invocations just means
+# it isn't scheduled to run yet, not that it's stopped running.
+resource "aws_cloudwatch_metric_alarm" "senate_automated_errors" {
+  alarm_name          = "capitol-lake-senate-collect-automated-errors"
+  alarm_description   = "${var.senate_automated_function_name} reported at least one Lambda error."
+  comparison_operator = "GreaterThanThreshold"
+  threshold           = 0
+  evaluation_periods  = 1
+  period              = var.senate_automated_error_period_seconds
+  statistic           = "Sum"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  dimensions = {
+    FunctionName = var.senate_automated_function_name
+  }
+  treat_missing_data = "notBreaching"
+  alarm_actions      = [aws_sns_topic.budget_alerts.arn]
+  ok_actions         = [aws_sns_topic.budget_alerts.arn]
+  tags               = var.tags
+}

@@ -1,10 +1,14 @@
 # House and Senate have two separate trigger mechanisms into the same
 # downstream chain (#18's resolution): House keeps an EventBridge schedule
-# end-to-end; Senate has no schedule (its eFD search UI is Akamai-blocked
-# from cloud egress, #17/#23) and instead wires an S3-event trigger straight
-# into `extract`, fired for both a human's manual bronze upload and
-# `senate_collect_handler`'s own writes — the entry point doesn't matter,
-# only that a Senate bronze object landed.
+# end-to-end; Senate's manual `senate_collect` path has no schedule (its eFD
+# search UI is Akamai-blocked from cloud egress, #17/#23) and instead relies
+# on an S3-event trigger straight into `extract`, fired for both a human's
+# manual bronze upload and `senate_collect_handler`'s own writes. #67/#69
+# resolved the Akamai block for a real Chromium session, so
+# `senate-collect-automated` gets its own EventBridge schedule below,
+# mirroring House's — it still has no SQS trigger of its own, since that same
+# S3-event notification (already scoped to `bronze/senate/*.html`) fires for
+# its writes too, regardless of which Senate path produced them.
 
 # --- House: EventBridge schedule -> house-collect ---
 
@@ -28,6 +32,28 @@ resource "aws_lambda_permission" "allow_eventbridge_house_collect" {
   function_name = var.house_collect_function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.house_schedule.arn
+}
+
+# --- Senate automated: EventBridge schedule -> senate-collect-automated ---
+
+resource "aws_cloudwatch_event_rule" "senate_automated_schedule" {
+  name                = "capitol-lake-senate-collect-automated-schedule"
+  description         = "Triggers the automated Senate collector Lambda on a schedule (#69)."
+  schedule_expression = var.senate_automated_schedule_expression
+  tags                = var.tags
+}
+
+resource "aws_cloudwatch_event_target" "senate_collect_automated" {
+  rule = aws_cloudwatch_event_rule.senate_automated_schedule.name
+  arn  = var.senate_collect_automated_function_arn
+}
+
+resource "aws_lambda_permission" "allow_eventbridge_senate_collect_automated" {
+  statement_id  = "AllowEventBridgeInvokeSenateCollectAutomated"
+  action        = "lambda:InvokeFunction"
+  function_name = var.senate_collect_automated_function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.senate_automated_schedule.arn
 }
 
 # --- Senate: bronze bucket S3 event -> extract, no schedule ---

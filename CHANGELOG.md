@@ -9,6 +9,18 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- Deploy the automated Senate collector on a daily schedule (#69):
+  `infra/modules/pipeline`'s `senate_collect_automated` Lambda mirrors
+  `house_collect`/`senate_collect`'s shape (own ECR repo, own IAM role,
+  `memory_mb = 2048`/`handler_timeout_seconds = 900` for a real Chromium
+  session) with no SQS trigger, since the bronze bucket's existing S3-event
+  notification into `extract` already fires for its writes regardless of
+  which Senate path produced them. `infra/modules/scheduling` gets a new
+  `rate(1 day)` EventBridge schedule for it, mirroring House's. A dedicated
+  `aws_cloudwatch_metric_alarm` in `infra/modules/finops` watches its own
+  Errors metric on a short period (unlike House's multi-day staleness
+  dead-man's-switch) so a single blocked/failed run alerts the same day,
+  through the existing `capitol-lake-budget-alerts` SNS topic.
 - Automated Senate collector Lambda handler and image (#68):
   `handlers/senate_collect_automated_handler.py` wires #67's
   `run_senate_efd_session` flow to a real `boto3` S3 client, following the
