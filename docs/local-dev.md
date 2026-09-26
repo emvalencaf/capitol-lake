@@ -117,9 +117,47 @@ every response it depends on (reaching the search form, the search response
 itself, each filing fetch) via `classify_probe_result`/
 `classify_search_response` (moved here permanently from
 `probes/senate_akamai_probe.py`, #29's throwaway probe) and raises
-immediately on anything but `"cleared"`. Pure-mechanics layer only so far —
-no Lambda handler, no schedule, no infra yet (later tickets); see
-`docs/research/senate-efd-session-hand-test.md` for a hand-test result.
+immediately on anything but `"cleared"`. Clearing the check turned out to
+depend on a browser fingerprint signal, not network origin at all (#68, see
+`docs/research/senate-efd-session-hand-test.md`'s Update section):
+`run_senate_efd_session` passes `de_headless_user_agent(browser)` to
+`browser.new_page()`, stripping the default headless Chromium UA's
+`HeadlessChrome` substring — a real Lambda egress IP is not required.
+
+`handlers/senate_collect_automated_handler.py` (#68) is the thin Lambda
+adapter for that flow: unlike `senate_collect_handler.py`, it takes no
+`event["response"]` capture — the browser session drives the search itself —
+so `event` is unused, and it wires `run_senate_efd_session` to a real
+`boto3` S3 client the same way every other handler does. It never enqueues
+an SQS message either, for the same reason `senate_collect_handler.py`
+doesn't (Senate has no schedule to chain from, per #18): an S3 event
+notification on the bronze bucket triggers extract directly for whatever it
+writes.
+
+`docker/senate_collect_automated.Dockerfile` packages it like
+`docker/senate_akamai_probe.Dockerfile` (#29) rather than the plain
+`docker/lambda.Dockerfile` base every stdlib-only stage uses: Playwright's
+Chromium needs real shared libraries the AWS Lambda base image's minimal
+userland doesn't carry, so it follows the same alternative-base-image
+pattern as `docker/extract.Dockerfile` (ADR-0011) — `awslambdaric` and a
+separately-downloaded `aws-lambda-rie` for local testing, `playwright
+install --with-deps chromium`, and `PLAYWRIGHT_BROWSERS_PATH` pinned so the
+non-root Lambda runtime user finds the browser the root build user
+installed. Build and run it the same way as every other stage:
+
+```bash
+docker-compose up -d --build senate-collect-automated-stage
+curl -XPOST "http://localhost:9104/2015-03-31/functions/function/invocations" \
+  -d '{}'
+```
+
+A run only succeeds where the Akamai check clears (see above) — a blocked
+run raises `SenateEfdBlockedError`, which the RIE endpoint reports as an
+invocation error rather than a bronze write. With both fingerprint fixes in
+place, a run from this development sandbox's own network wrote a real
+bronze object and its `.meta.json` sidecar, verified directly in MinIO; see
+`docs/research/senate-collect-automated-handler-rie-test.md` for the full
+result.
 
 ## Orchestration: SQS chain and stage-to-stage handoff (#43)
 

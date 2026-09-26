@@ -9,6 +9,23 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- Automated Senate collector Lambda handler and image (#68):
+  `handlers/senate_collect_automated_handler.py` wires #67's
+  `run_senate_efd_session` flow to a real `boto3` S3 client, following the
+  same thin/untested handler convention as every other stage; it takes no
+  `event["response"]` capture since the browser session drives the search
+  itself, and never enqueues an SQS message (Senate has no schedule to chain
+  from, per #18). `docker/senate_collect_automated.Dockerfile` packages it
+  like `docker/senate_akamai_probe.Dockerfile`'s alternative-base pattern
+  (`python:3.12-slim` + `awslambdaric` + `aws-lambda-rie` + Playwright
+  Chromium with `PLAYWRIGHT_BROWSERS_PATH` pinned) rather than the plain
+  `docker/lambda.Dockerfile` base, since Playwright's Chromium needs real
+  shared libraries the AWS base image's minimal userland doesn't carry.
+  Demoed locally via RIE against MinIO (`senate-collect-automated-stage` in
+  `docker-compose.yml`, port 9104), per `docs/local-dev.md`: a real
+  invocation wrote a real bronze object and its `.meta.json` sidecar,
+  verified directly in MinIO. No AWS infra, schedule, or real deploy yet
+  (later ticket).
 - Senate eFD PTR search-and-fetch session (#67): `capitol_lake.browser.senate_efd_session`
   drives one authenticated Playwright session through the full flow —
   warm-up navigation, the `prohibition_agreement` gate accepted via a real
@@ -159,6 +176,21 @@ heading when `development` is released to `master`.
 
 ### Fixed
 
+- Senate eFD Akamai check: the `403` every automated run hit (#67's own
+  hand test, #68's first RIE run) traced to a browser fingerprint signal,
+  not network/Lambda-egress-IP origin as previously concluded — the default
+  headless Chromium UA's `HeadlessChrome` substring (a four-way diagnostic
+  ruled out `navigator.webdriver` as the operative signal).
+  `capitol_lake.browser.senate_efd_session`'s new
+  `de_headless_user_agent(browser)` helper (derived from `browser.version`,
+  re-exported from `probes.senate_akamai_probe`) is now passed to
+  `browser.new_page()` in both `run_senate_efd_session` and
+  `probes.senate_akamai_probe.run_probe`. Confirmed by hand from the same
+  network/sandbox that previously 403'd: a real RIE invocation now writes a
+  real bronze object, verified in MinIO — see
+  `docs/research/senate-efd-session-hand-test.md`'s Update section and
+  `docs/research/senate-collect-automated-handler-rie-test.md`'s Update
+  section. No real AWS Lambda deploy is needed to clear the check after all.
 - `src/capitol_lake/stages/digital_extract.py`: `parse_value_range` now
   accepts a bare `$X[.XX]` literal amount (e.g. `$9.00`), treating it as
   `ValueRange(X, X)`, instead of returning `None` and failing the whole

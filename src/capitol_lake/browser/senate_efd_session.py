@@ -7,6 +7,11 @@ flow (warm-up navigation, accept the `prohibition_agreement` gate via a
 real trusted click, then request filings) — see
 `docs/research/senate-akamai-lambda-probe.md` and
 `probes/senate_akamai_probe.py`'s module docstring for how that was learned.
+A fingerprint signal independent of network origin also turned out to
+matter (#68, confirmed by hand from a network #23/#29 already cleared,
+which still 403'd until this was fixed): the default headless UA string's
+`HeadlessChrome` substring — see `LAMBDA_SAFE_CHROMIUM_LAUNCH_ARGS`/
+`de_headless_user_agent` below.
 
 This module is the pure-mechanics layer #67 scopes: one browser session
 that warms up, accepts the agreement, submits the PTR search form for a
@@ -85,12 +90,37 @@ _AKAMAI_MARKERS = ("Access Denied", "Reference #")
 # capabilities, no GPU, no meaningful /dev/shm) per
 # microsoft/playwright#14023. Shared with `probes/senate_akamai_probe.py`,
 # which launches the same way for the same reason.
+#
+# `--disable-blink-features=AutomationControlled` (#68): without it,
+# `navigator.webdriver` reads `true`. By itself this flag isn't confirmed to
+# affect Akamai's check either way (#68's own hand test cleared the check
+# with `webdriver` still `true`, once the UA fix below was applied) — it's
+# kept as a cheap, standard headless-detection precaution against a future,
+# stricter check, not because this one is known to read it.
 LAMBDA_SAFE_CHROMIUM_LAUNCH_ARGS = [
     "--no-sandbox",
     "--disable-gpu",
     "--disable-dev-shm-usage",
     "--single-process",
+    "--disable-blink-features=AutomationControlled",
 ]
+
+
+def de_headless_user_agent(browser) -> str:
+    """A real desktop Chrome's UA never contains "Headless" the way
+    Playwright's classic headless Chromium's default UA does
+    (`HeadlessChrome/<version>` instead of `Chrome/<version>`) — confirmed by
+    hand (#68) as the one fingerprint signal Akamai's check actually keys
+    off: the same request, only this substring changed, went from 403 to
+    200, independent of `navigator.webdriver`'s value. Derived from
+    `browser.version` rather than a hardcoded version string, so it never
+    drifts from whichever Chromium build is actually installed.
+    """
+    return (
+        f"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+        f"Chrome/{browser.version} Safari/537.36"
+    )
+
 
 ResponseOutcome = Literal["cleared", "blocked_akamai", "blocked_other", "ambiguous"]
 
@@ -238,7 +268,7 @@ def run_senate_efd_session(
             channel="chromium", args=LAMBDA_SAFE_CHROMIUM_LAUNCH_ARGS
         )
         try:
-            page = browser.new_page()
+            page = browser.new_page(user_agent=de_headless_user_agent(browser))
 
             home_response = page.goto(SENATE_HOME_URL, wait_until="networkidle")
             home_status_code = home_response.status if home_response is not None else 0

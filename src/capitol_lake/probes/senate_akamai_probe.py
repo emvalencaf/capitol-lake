@@ -52,6 +52,7 @@ from capitol_lake.browser.senate_efd_session import (
 from capitol_lake.browser.senate_efd_session import (
     LAMBDA_SAFE_CHROMIUM_LAUNCH_ARGS,
     classify_probe_result,
+    de_headless_user_agent,
 )
 from capitol_lake.browser.senate_efd_session import (
     ResponseOutcome as ProbeOutcome,
@@ -63,6 +64,7 @@ __all__ = [
     "ProbeOutcome",
     "ProbeResult",
     "classify_probe_result",
+    "de_headless_user_agent",
     "run_probe",
 ]
 
@@ -145,7 +147,7 @@ def run_probe(filing_id: str, *, url_template: str) -> ProbeResult:
             channel="chromium", args=LAMBDA_SAFE_CHROMIUM_LAUNCH_ARGS
         )
         try:
-            page = browser.new_page()
+            page = browser.new_page(user_agent=de_headless_user_agent(browser))
 
             home_response = page.goto(SENATE_HOME_URL, wait_until="networkidle")
             home_status_code = home_response.status if home_response is not None else 0
