@@ -7,6 +7,15 @@ heading when `development` is released to `master`.
 
 ## [Unreleased]
 
+### Changed
+
+- `infra-cicd.yml`: `AWS_ROLE_ARN`, `TF_STATE_BUCKET`, and `FINOPS_ALERT_EMAIL`
+  moved from repository variables to repository secrets, so GitHub masks them
+  in Actions logs ahead of the repo's planned move to public (ADR-0009's
+  "public Phase 3" rationale for OIDC applies here too — a role ARN and
+  bucket name aren't credentials on their own, but they're not meant to be
+  world-readable log output either). `infra/README.md`'s setup instructions
+  updated to match.
 ### Fixed
 
 - `infra`: `house-collect`'s Lambda timeout was left at the `lambda-stage`
