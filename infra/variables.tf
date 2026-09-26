@@ -86,3 +86,15 @@ variable "senate_automated_schedule_expression" {
   type        = string
   default     = "rate(1 day)"
 }
+
+variable "senate_automated_error_period_seconds" {
+  description = <<-EOT
+    CloudWatch period, in seconds, the senate-collect-automated Errors alarm
+    evaluates (#69). Kept short by default (see
+    modules/finops/variables.tf's senate_automated_error_period_seconds) so a
+    single failed run alerts promptly rather than waiting out a full
+    schedule interval.
+  EOT
+  type        = number
+  default     = 300
+}

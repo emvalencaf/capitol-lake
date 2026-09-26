@@ -54,7 +54,8 @@ module "finops" {
   staleness_function_name  = module.pipeline.house_collect_function_name
   staleness_period_seconds = var.house_schedule_period_seconds
 
-  senate_automated_function_name = module.pipeline.senate_collect_automated_function_name
+  senate_automated_function_name        = module.pipeline.senate_collect_automated_function_name
+  senate_automated_error_period_seconds = var.senate_automated_error_period_seconds
 
   tags = var.common_tags
 }
