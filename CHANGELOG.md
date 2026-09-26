@@ -9,6 +9,15 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- `.wiki/` current-state concepts (28 concepts, `okf_validate.py --strict`
+  passing): an architecture-overview concept indexing `docs/architecture.md`
+  and its five pipeline-stage concepts (collect, extract, ticker
+  resolution/LLM fallback, quality gate, Silver write); twelve domain-term
+  concepts covering `CONTEXT.md`'s vocabulary (disclosures, dates, layers);
+  and one decision concept per existing ADR (0001, 0002, 0003, 0008, 0009,
+  0010, 0011, 0012, 0013), summarizing each's decision and cross-linking back
+  to the ADR file rather than restating its reasoning. Purely additive from
+  current state forward, no `backfill` run. (#80)
 - `docs/metrics.md`: extraction-accuracy metrics doc sourced from the
   `eval/` harness (per-field scores for House digital, House scanned,
   Senate HTML) and this changelog. Every number is labeled eval-harness/
