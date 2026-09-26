@@ -9,6 +9,19 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- `docs/cost.md`: AWS cost estimate built from a real
+  [AWS Pricing Calculator](https://calculator.aws) estimate (shareable link
+  included), splitting fixed scheduling cost (House/Senate collector
+  Lambdas, 365 EventBridge invocations/year each) from per-filing processing
+  cost (`extract`'s ticker/LLM-fallback/silver-write, S3, SQS). House volume
+  cited to ADR 0008 (~451-515 PTRs/year); Senate volume derived from
+  `eval/README.md`'s 661-match eFD search window and labeled an estimate
+  (~55-60 PTRs/year). Embeds a `diagram-design` bar chart of estimated cost
+  by stage (`docs/diagrams/raw/cost-by-stage.html` /
+  `docs/diagrams/assets/cost-by-stage.svg`). Notes that EventBridge's
+  default-bus rules aren't billed, that ECR image storage/lifecycle is
+  excluded by deliberate choice given the project's demonstrative scope, and
+  that real invocation durations are assumed pending deployment. (#77)
 - `docs/architecture.md`: narrative architecture overview of the pipeline
   (House/Senate collect, extract routing, ticker/LLM fallback, quality
   gate, Bronze -> Silver writes), cross-referencing ADRs 0001, 0002, 0003,
