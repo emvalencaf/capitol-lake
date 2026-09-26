@@ -9,6 +9,14 @@ heading when `development` is released to `master`.
 
 ### Fixed
 
+- `infra`: `house-collect`'s Lambda timeout was left at the `lambda-stage`
+  default (60s), which times out mid-run (`Sandbox.Timedout`) on a
+  full-year backfill — confirmed via `scripts/invoke-collectors.sh house`:
+  it wrote 5 filings to Bronze in the 60s window before hitting the limit,
+  against a ~500 filings/year backlog (`docs/cost.md`) at roughly 1/s.
+  Bumped to 900s (Lambda's ceiling, matching `senate-collect-automated`'s
+  existing timeout) — day-to-day runs against the daily schedule's small
+  trickle of new filings finish in well under that.
 - `infra`: `house-collect`/`senate-collect`/`senate-collect-automated`'s IAM
   role was missing `s3:ListBucket` on the Bronze bucket (only had
   `GetObject`/`PutObject` scoped to `bronze/*`). Each collector's

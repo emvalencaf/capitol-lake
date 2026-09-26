@@ -217,6 +217,13 @@ module "house_collect" {
   role_arn    = aws_iam_role.this["house-collect"].arn
   sqs_trigger = false # EventBridge-scheduled, not SQS-triggered (infra/modules/scheduling)
 
+  # The lambda-stage default (60s) times out mid-run on a full-year backfill
+  # (~500 filings/year, docs/cost.md, at roughly 1/s): a first invocation
+  # against a filing year with a large backlog needs far more headroom than
+  # the day-to-day trickle of new filings the daily schedule normally sees.
+  # 900s matches Lambda's ceiling (and senate-collect-automated's own
+  # timeout below) rather than guessing a number in between.
+  handler_timeout_seconds        = 900
   reserved_concurrent_executions = var.stage_reserved_concurrency
 
   environment_variables = {
