@@ -27,9 +27,9 @@ variable "llm_fallback_provider" {
 }
 
 variable "stage_reserved_concurrency" {
-  description = "Reserved concurrency applied to each of the 4 stage Lambdas (see root variables.tf for the full rationale and the fresh-account quota gotcha)."
+  description = "Reserved concurrency applied to each of the 4 stage Lambdas (see root variables.tf for the full rationale)."
   type        = number
-  default     = 5
+  default     = -1
 }
 
 variable "tags" {
