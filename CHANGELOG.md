@@ -9,6 +9,16 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- `scripts/deploy-infra.sh`: automates the main stack's first-deploy
+  chicken-and-egg problem — every pipeline Lambda points at
+  `<its ECR repo>:latest`, which doesn't exist until an image is pushed, so a
+  plain `terraform apply` on a fresh account fails with "Provide a valid
+  source image." The script applies the ECR repos only, builds and pushes
+  each of the 4 stages' images, applies the rest of the stack, then forces
+  each Lambda onto the just-pushed image (working around `:latest` not
+  registering as a Terraform diff) — the same dance
+  `scripts/deploy-senate-akamai-probe.sh` already automated for the
+  standalone probe Lambda. `infra/README.md` updated to reference it.
 - Root README: links from About The Project, Getting Started, and Usage to
   `docs/architecture.md`, `docs/cost.md`, `docs/metrics.md`, and
   `infra/README.md`. No new top-level section; existing structure, the

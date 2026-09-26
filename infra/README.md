@@ -56,11 +56,24 @@ terraform init -backend-config=backend.hcl
 terraform plan -var="finops_alert_email=you@example.com"
 ```
 
-`terraform apply` against a fresh account (building/pushing each stage's
-container image to its ECR repository, and populating the SSM secret
-parameters with real values) is a deployment step, out of scope for the infra
-work tracked here — from here on, `apply` runs through CI (step 3), not by
-hand.
+A plain `terraform apply` fails on a fresh account: every stage's Lambda is
+`package_type = "Image"` pointing at `<its ECR repo>:latest`
+(`modules/pipeline/main.tf`), but that repo doesn't exist with an image in it
+until the same apply creates it — Terraform errors with "Provide a valid
+source image." `scripts/deploy-infra.sh up` automates the fix (apply the ECR
+repos only, build and push each stage's image from `docker/*.Dockerfile`,
+then apply the rest of the stack), the same three-step dance
+`scripts/deploy-senate-akamai-probe.sh` already does for the standalone probe
+Lambda:
+
+```bash
+cd ..
+FINOPS_ALERT_EMAIL=you@example.com scripts/deploy-infra.sh up
+```
+
+Populating the SSM secret parameters with real values (LLM fallback /
+ticker resolution API keys) is a separate, manual post-apply step — see
+"Notes" below. From here on, `apply` runs through CI (step 3), not by hand.
 
 ### 2. One-time GitHub setup
 
