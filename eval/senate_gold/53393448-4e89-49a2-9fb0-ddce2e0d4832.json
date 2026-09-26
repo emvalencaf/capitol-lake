@@ -1,0 +1,77 @@
+{
+  "doc_id": "53393448-4e89-49a2-9fb0-ddce2e0d4832",
+  "kind": "html",
+  "year": 2024,
+  "transactions": [
+    {
+      "line_no": 5,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Vanguard FTSE Developed Markets ETF",
+      "transaction_date": "2024-07-18",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 4,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Motorola Solutions, Inc. Common Stock",
+      "transaction_date": "2024-07-26",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 3,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Alphabet Inc. - Class A Common Stock",
+      "transaction_date": "2024-07-26",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "joint",
+      "transaction_type": "sale_partial",
+      "asset_type": "stock",
+      "asset_description": "SPDR MidCap Trust Series I",
+      "transaction_date": "2024-07-18",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 1,
+      "owner": "joint",
+      "transaction_type": "sale_partial",
+      "asset_type": "stock",
+      "asset_description": "Lam Research Corporation - Common Stock",
+      "transaction_date": "2024-07-26",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}

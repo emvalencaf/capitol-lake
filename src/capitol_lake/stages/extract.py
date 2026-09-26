@@ -1,14 +1,18 @@
-"""Extract stage: House doc-id routing plus Hive-partitioned silver Parquet.
+"""Extract stage: chamber extractors plus Hive-partitioned silver Parquet.
 
-Given the bronze key of a House PTR, routes to the digital or scanned
-extractor by the doc id's prefix (`route_doc_id`, from `house_collect`), then
-serializes the resulting `Filing` and `Transaction` rows into two
-Hive-partitioned Parquet part files, one per silver table (`filings`,
-`transactions`), per ADR 0008. Every transaction row extracted is kept
-regardless of `asset_type` — this stage only routes and serializes, it never
-filters a row out. Like every other stage's pure function, this never
-touches S3: it returns each part file's key and bytes, and the caller (a
-handler) performs the actual write.
+`extract_house_filing` routes a House PTR to the digital or scanned extractor
+by the doc id's prefix (`route_doc_id`, from `house_collect`);
+`extract_senate_filing` hands a Senate `/ptr/` page straight to the one HTML
+extractor there is (no digital/scanned duality for Senate, see
+`senate_extract`). Both then serialize the resulting `Filing` and
+`Transaction` rows into two Hive-partitioned Parquet part files, one per
+silver table (`filings`, `transactions`), per ADR 0008. Every transaction row
+extracted is kept regardless of `asset_type` — this stage only routes and
+serializes, it never filters a row out. Like every other stage's pure
+function, neither touches S3: each returns its part files' keys and bytes,
+and the caller (a handler) performs the actual write. The two chambers are
+not yet dispatched from one shared entry point — a caller already knows
+which chamber's bronze key it has and calls the matching function directly.
 
 `resolve_ticker` (optional, injected like every other network dependency in
 this codebase) fills a still-null `ticker` on stock/ETF rows via the
@@ -39,6 +43,7 @@ from capitol_lake.schema import AssetType, Filing, Transaction
 from capitol_lake.stages.digital_extract import extract_digital
 from capitol_lake.stages.house_collect import route_doc_id
 from capitol_lake.stages.scanned_extract import extract_scanned
+from capitol_lake.stages.senate_extract import extract_senate_html
 from capitol_lake.stages.ticker_resolve import TICKER_ASSET_TYPES
 
 FILINGS_TABLE = "filings"
@@ -146,6 +151,27 @@ def _parquet_bytes(rows: list[dict[str, Any]], schema: pa.Schema) -> bytes:
     return sink.getvalue().to_pybytes()
 
 
+def _transaction_rows(
+    transactions: list[Transaction],
+    *,
+    resolve_ticker: Callable[[str, AssetType], str | None] | None,
+    llm_fallback: Callable[[Transaction], Transaction] | None,
+) -> list[dict[str, Any]]:
+    rows = []
+    for transaction in transactions:
+        if llm_fallback is not None:
+            transaction = llm_fallback(transaction)
+        row = transaction_row(transaction)
+        if (
+            row["ticker"] is None
+            and resolve_ticker is not None
+            and transaction.asset_type in TICKER_ASSET_TYPES
+        ):
+            row["ticker"] = resolve_ticker(transaction.asset_description, transaction.asset_type)
+        rows.append(row)
+    return rows
+
+
 def extract_house_filing(
     pdf_bytes: bytes,
     *,
@@ -193,21 +219,60 @@ def extract_house_filing(
             f"disagrees with the bronze key's doc id {doc_id!r}"
         )
 
-    transaction_rows = []
-    for transaction in extraction.transactions:
-        if llm_fallback is not None:
-            transaction = llm_fallback(transaction)
-        row = transaction_row(transaction)
-        if (
-            row["ticker"] is None
-            and resolve_ticker is not None
-            and transaction.asset_type in TICKER_ASSET_TYPES
-        ):
-            row["ticker"] = resolve_ticker(transaction.asset_description, transaction.asset_type)
-        transaction_rows.append(row)
+    transaction_rows = _transaction_rows(
+        extraction.transactions, resolve_ticker=resolve_ticker, llm_fallback=llm_fallback
+    )
 
     return {
         "kind": kind,
+        "filings": {
+            "key": silver_key(FILINGS_TABLE, chamber, year, doc_id),
+            "bytes": _parquet_bytes([_filing_row(extraction.filing)], _FILING_SCHEMA),
+        },
+        "transactions": {
+            "key": silver_key(TRANSACTIONS_TABLE, chamber, year, doc_id),
+            "bytes": _parquet_bytes(transaction_rows, _TRANSACTION_SCHEMA),
+        },
+    }
+
+
+def extract_senate_filing(
+    html_bytes: bytes,
+    *,
+    bronze_key: str,
+    resolve_ticker: Callable[[str, AssetType], str | None] | None = None,
+    llm_fallback: Callable[[Transaction], Transaction] | None = None,
+) -> dict[str, Any]:
+    """Extract a Senate `/ptr/` filing page and serialize its rows to silver Parquet.
+
+    `bronze_key` (`bronze/senate/year=<year>/<doc_id>.html`) supplies the
+    `chamber`, `year` and `doc_id` used both as the extracted `Filing`'s doc
+    id (per ADR 0013, the page has no doc id of its own to cross-check
+    against) and for the output silver keys (`silver_key`). Unlike House,
+    there is no digital/scanned duality to route on: only clean HTML `/ptr/`
+    pages are ever collected (`stages.senate_collect`), so `kind` is always
+    `"html"`.
+
+    `resolve_ticker` and `llm_fallback` behave exactly as in
+    `extract_house_filing` (see its docstring): both are optional, applied
+    per transaction row in the same order (fallback, then ticker
+    resolution), and each's absence performs no fallback/resolution at all.
+
+    Returns the same `{"kind": ..., "filings": {...}, "transactions": {...}}`
+    shape as `extract_house_filing`. Raises `SenateFilingFormatError` if the
+    page doesn't have the structure this extractor expects,
+    `UnknownSenateOwnerError`/`UnknownSenateTransactionTypeError` if a row's
+    Owner/Type text doesn't match a known value.
+    """
+    chamber, year, doc_id = parse_bronze_key(bronze_key)
+    extraction = extract_senate_html(html_bytes, bronze_key=bronze_key, doc_id=doc_id)
+
+    transaction_rows = _transaction_rows(
+        extraction.transactions, resolve_ticker=resolve_ticker, llm_fallback=llm_fallback
+    )
+
+    return {
+        "kind": "html",
         "filings": {
             "key": silver_key(FILINGS_TABLE, chamber, year, doc_id),
             "bytes": _parquet_bytes([_filing_row(extraction.filing)], _FILING_SCHEMA),

@@ -1,0 +1,21 @@
+{
+  "doc_id": "4ef71e79-ac98-4126-9415-66da6899ab72",
+  "kind": "html",
+  "year": 2022,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "spouse",
+      "transaction_type": "sale_partial",
+      "asset_type": "stock",
+      "asset_description": "PMI",
+      "transaction_date": "2021-11-24",
+      "value_min": 15001.0,
+      "value_max": 50000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}

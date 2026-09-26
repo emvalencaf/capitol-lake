@@ -1,0 +1,91 @@
+{
+  "doc_id": "5d03af49-5bd7-4212-9587-7bfd13b98185",
+  "kind": "html",
+  "year": 2025,
+  "transactions": [
+    {
+      "line_no": 6,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Salesforce Inc",
+      "transaction_date": "2025-01-14",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 5,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Nvidia Corp",
+      "transaction_date": "2025-01-14",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 4,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "NRG Energy, Inc. Common Stock",
+      "transaction_date": "2025-01-28",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 3,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Mastercard Incorporated Common Stock",
+      "transaction_date": "2025-01-14",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Invesco Short Term Treasury ETF",
+      "transaction_date": "2025-01-28",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 1,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Invesco Short Term Treasury ETF",
+      "transaction_date": "2025-01-16",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}

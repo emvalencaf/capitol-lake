@@ -176,3 +176,83 @@ successfully (30 digital minus the 2 that crash per #57); not applicable
 to those 2 crashing digital filings or the 10 scanned ones (no
 `tesseract`) in this environment — re-run once #57 is fixed and
 `tesseract` is available to get a determinism verdict on the full 40.
+
+## Senate gold set (`extract_senate_filing`)
+
+A parallel 40-filing gold set for the Senate HTML extractor (ADR 0013),
+scored with the same `capitol_lake.evaluation` machinery: `eval/senate_fixtures/<doc_id>.html`
+(real Senate `/ptr/` pages, `manifest.json` recording each one's `doc_id`/`year`),
+`eval/senate_gold/<doc_id>.json` (same gold record format as above, minus
+`kind` — every fixture is `"html"`), and `scripts/run_senate_eval.py`
+(`uv run scripts/run_senate_eval.py`). There is no digital/scanned split to
+break out by, so this reports one overall column, not three.
+
+### Sampling
+
+40 real `/ptr/` filings fetched live from `efdsearch.senate.gov`'s own
+search endpoint (Claude Code's Playwright browser plugin, not this repo's
+`senate_efd_session` — see its module docstring: a scripted headless launch
+gets 403'd by Akamai's `HeadlessChrome` UA check, the interactive plugin
+browser doesn't), searched across `01/01/2022`–`09/26/2026`. The search
+endpoint caps `length` at 100 rows per request; of the first 100 rows (of
+661 total `/ptr/`+`/paper/` matches in that window), exactly 40 were `/ptr/`
+(the rest `/paper/`, out of scope per `route_filing_kind`) — spanning 2022
+through 2026, 15 different filers, with no manual curation of which 40.
+`tests/fixtures/senate_ptr_sample.html` (`b999bc0e-...`, Alan Armstrong's
+09/17/2026 PTR) is one real member of this same 40, reused rather than
+duplicated, matching the House set's convention.
+
+### Gold record format
+
+Same shape as the House gold record above, minus `kind`. Built by an
+independent script (not committed, not a rerun of `senate_extract.py`):
+`BeautifulSoup`-parses each fixture's table with a differently-structured
+traversal (whole-cell text first, then a regex/div split, rather than
+`senate_extract.py`'s decompose-then-line-split), and cross-checks every
+filing's own self-reported `(N transactions total)` and per-owner counts
+(the `<ul>` list above the table) against the row count it extracted — all
+40 filings' self-reported counts matched exactly, a strong signal no row
+was dropped or double-counted structurally. Every atypical row type
+(`Exchange`, `Option`, non-`Joint` owners, `Other`/private-stock) was then
+hand-reviewed against the raw HTML before being accepted as gold.
+
+### Findings from the first run (2026-09-26)
+
+```
+field                    overall
+--------------------------------
+owner                       1.00
+transaction_type            1.00
+asset_type                  1.00
+transaction_date            1.00
+value_min                   1.00
+value_max                   1.00
+notification_date           1.00
+asset_description           1.00
+filing_status               1.00
+sub_owner                   1.00
+description                 1.00
+```
+
+All 40 filings extracted successfully and scored a perfect 1.00 on every
+field (`notification_date`/`filing_status`/`sub_owner` trivially so, per
+ADR 0013 — both gold and predicted are always null for Senate, so this
+metric never actually exercises them). Determinism check passed for all 40.
+
+This first run surfaced two real gaps against the initial single-fixture
+implementation, both fixed before this run (not left for a follow-up issue,
+unlike House's #57, since both were small and self-contained):
+
+- One of the 40 (`fda235b3-...`, a 703-transaction filing — by far the
+  largest in the set) is a legitimate stress test: a private-stock
+  (`Other` asset type) row can carry *two* `text-muted` divs (`Company:`
+  and `Description:`), not just one. The original `_parse_asset_cell` only
+  read the first and silently dropped the second. Confirmed in 4/40 real
+  filings once found.
+- A stray double space in the source's own printed data (`"iShares  Agency
+  Bond ETF"`, confirmed real, not a rendering artifact) survived into
+  `asset_description` verbatim; every other field already collapsed
+  whitespace via `get_text(strip=True)`, this one line hadn't.
+
+Both are covered by new unit tests (`test_two_text_muted_divs_are_both_kept_not_just_the_first`)
+alongside the existing single-fixture suite, not only by this gold set.

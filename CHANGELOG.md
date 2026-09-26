@@ -9,6 +9,30 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- `extract_senate_filing` (`stages/extract.py`), a Senate counterpart to
+  `extract_house_filing`: parses a Senate `/ptr/` filing page
+  (`stages/senate_extract.py`, new `beautifulsoup4`/`lxml` dependency) and
+  serializes it to the same silver Parquet shape. No digital/scanned duality
+  to route on (only clean HTML `/ptr/` pages are collected), so `kind` is
+  always `"html"`. Per ADR 0013: unlike House, the page carries no doc id of
+  its own to cross-check against the bronze key, so `doc_id` is taken as
+  given; an `Exchange` row's two-line asset cell (asset given up, asset
+  received) becomes one `Transaction` with the given-up asset in
+  `asset_description` and the received asset's text in `description`, and
+  `notification_date`/`filing_status`/`sub_owner` stay null with no
+  structured source to read them from. Chamber routing into a shared
+  `extract` entry point / `extract_handler.py` is deferred to a follow-up.
+- A 40-filing hand-labelled gold set for `extract_senate_filing`
+  (`eval/senate_fixtures/`, `eval/senate_gold/`, `scripts/run_senate_eval.py`),
+  parallel to the House one (see `eval/README.md`'s "Senate gold set"
+  section): real `/ptr/` pages fetched live, scored a perfect 1.00 on every
+  field after fixing two real gaps the single hand-built test fixture never
+  exercised — a private-stock row's asset cell can carry two `text-muted`
+  divs (`Company:`/`Description:`), only the first of which
+  `_parse_asset_cell` originally kept, and a stray double space in the
+  source's own printed data wasn't whitespace-collapsed into
+  `asset_description` like every other field already was. Both fixed in
+  `senate_extract.py` with new unit test coverage, not deferred.
 - Deploy the automated Senate collector on a daily schedule (#69):
   `infra/modules/pipeline`'s `senate_collect_automated` Lambda mirrors
   `house_collect`/`senate_collect`'s shape (own ECR repo, own IAM role,

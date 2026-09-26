@@ -1,0 +1,77 @@
+{
+  "doc_id": "9c0b720d-7e27-4b02-8cf5-a85ba88c9543",
+  "kind": "html",
+  "year": 2026,
+  "transactions": [
+    {
+      "line_no": 5,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "iShares Expanded Tech-Software Sector ETF",
+      "transaction_date": "2026-06-25",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 4,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "abrdn Physical Palladium Shares ETF",
+      "transaction_date": "2026-06-25",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 3,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "SCHP - Schwab U.S. TIPS ETF",
+      "transaction_date": "2026-06-17",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "CEG - Constellation Energy Corporation - Common Stock When-Issued",
+      "transaction_date": "2026-06-12",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 1,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "UnitedHealth Group Incorporated Common Stock (DE)",
+      "transaction_date": "2026-06-04",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}
