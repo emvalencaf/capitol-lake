@@ -24,6 +24,22 @@ variable "staleness_period_seconds" {
   type        = number
 }
 
+variable "senate_automated_function_name" {
+  description = "Name of the senate-collect-automated Lambda function the dedicated Errors alarm watches (#69)."
+  type        = string
+}
+
+variable "senate_automated_error_period_seconds" {
+  description = <<-EOT
+    CloudWatch period, in seconds, the senate-collect-automated Errors alarm
+    evaluates. Kept short (unlike staleness_period_seconds) so a single
+    failed run alerts promptly rather than waiting out a full schedule
+    interval.
+  EOT
+  type        = number
+  default     = 300
+}
+
 variable "tags" {
   description = <<-EOT
     Tags merged onto every resource this module creates (common_tags from the

@@ -11,12 +11,14 @@ Single environment, no dev/staging (ADR-0009's scoping decision).
   first, by hand.
 - `modules/storage` — bronze/silver S3 buckets.
 - `modules/pipeline` — ECR repositories, IAM roles, SSM secret parameters,
-  and the three Lambda stages (`house-collect`, `senate-collect`, `extract`),
-  each via `modules/lambda-stage`.
-- `modules/scheduling` — House's EventBridge schedule and Senate's S3-event
-  trigger into `extract`.
-- `modules/finops` — the tag-filtered AWS Budget and dead-man's-switch
-  staleness alarm (ADR-0010), both alerting through one SNS topic.
+  and the four Lambda stages (`house-collect`, `senate-collect`,
+  `senate-collect-automated`, `extract`), each via `modules/lambda-stage`.
+- `modules/scheduling` — House's and the automated Senate collector's
+  EventBridge schedules, plus the manual Senate path's S3-event trigger into
+  `extract`.
+- `modules/finops` — the tag-filtered AWS Budget, House's dead-man's-switch
+  staleness alarm, and the automated Senate collector's dedicated Errors
+  alarm (ADR-0010, #69), all alerting through one SNS topic.
 - `main.tf` / `variables.tf` / `outputs.tf` / `providers.tf` / `versions.tf`
   at this level — the root module composing the above.
 

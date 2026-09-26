@@ -31,6 +31,10 @@ module "scheduling" {
   house_filing_year           = var.house_filing_year
   house_schedule_expression   = var.house_schedule_expression
 
+  senate_collect_automated_function_name = module.pipeline.senate_collect_automated_function_name
+  senate_collect_automated_function_arn  = module.pipeline.senate_collect_automated_function_arn
+  senate_automated_schedule_expression   = var.senate_automated_schedule_expression
+
   extract_function_name = module.pipeline.extract_function_name
   extract_function_arn  = module.pipeline.extract_function_arn
 
@@ -49,6 +53,8 @@ module "finops" {
 
   staleness_function_name  = module.pipeline.house_collect_function_name
   staleness_period_seconds = var.house_schedule_period_seconds
+
+  senate_automated_function_name = module.pipeline.senate_collect_automated_function_name
 
   tags = var.common_tags
 }

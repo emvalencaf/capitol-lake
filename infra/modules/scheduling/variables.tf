@@ -17,6 +17,20 @@ variable "house_schedule_expression" {
   default     = "rate(1 day)"
 }
 
+variable "senate_collect_automated_function_name" {
+  type = string
+}
+
+variable "senate_collect_automated_function_arn" {
+  type = string
+}
+
+variable "senate_automated_schedule_expression" {
+  description = "EventBridge schedule expression (rate(...) or cron(...)) for the automated Senate collector."
+  type        = string
+  default     = "rate(1 day)"
+}
+
 variable "extract_function_name" {
   type = string
 }

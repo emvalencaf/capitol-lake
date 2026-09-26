@@ -80,3 +80,9 @@ variable "house_schedule_expression" {
   type        = string
   default     = "rate(1 day)"
 }
+
+variable "senate_automated_schedule_expression" {
+  description = "EventBridge schedule expression for the automated Senate collector (#69)."
+  type        = string
+  default     = "rate(1 day)"
+}
