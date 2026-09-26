@@ -72,6 +72,64 @@
         </pattern>
         <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#545b64"/></marker>
         <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#ff9900"/></marker>
+
+        <!-- Service icons, 24x24, stroked, currentColor (Tabler Icons, MIT) -->
+        <!-- clock (EventBridge schedule) — Tabler Icons / `clock` -->
+        <symbol id="icon-clock" viewBox="0 0 24 24">
+          <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 7v5l3 3"/>
+          </g>
+        </symbol>
+        <!-- server (Lambda compute) — Tabler Icons / `server` -->
+        <symbol id="icon-server" viewBox="0 0 24 24">
+          <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v2a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3"/>
+            <path d="M3 15a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v2a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3l0 -2"/>
+            <path d="M7 8l0 .01"/>
+            <path d="M7 16l0 .01"/>
+          </g>
+        </symbol>
+        <!-- bucket (S3) — Tabler Icons / `bucket` -->
+        <symbol id="icon-bucket" viewBox="0 0 24 24">
+          <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 7a8 4 0 1 0 16 0a8 4 0 1 0 -16 0"/>
+            <path d="M4 7c0 .664 .088 1.324 .263 1.965l2.737 10.035c.5 1.5 2.239 2 5 2s4.5 -.5 5 -2c.333 -1 1.246 -4.345 2.737 -10.035a7.45 7.45 0 0 0 .263 -1.965"/>
+          </g>
+        </symbol>
+        <!-- stack (SQS queue) — Tabler Icons / `stack-2` -->
+        <symbol id="icon-queue" viewBox="0 0 24 24">
+          <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 4l-8 4l8 4l8 -4l-8 -4"/>
+            <path d="M4 12l8 4l8 -4"/>
+            <path d="M4 16l8 4l8 -4"/>
+          </g>
+        </symbol>
+        <!-- package (ECR container image) — Tabler Icons / `package` -->
+        <symbol id="icon-container" viewBox="0 0 24 24">
+          <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l8 4.5l0 9l-8 4.5l-8 -4.5l0 -9l8 -4.5"/>
+            <path d="M12 12l8 -4.5"/>
+            <path d="M12 12l0 9"/>
+            <path d="M12 12l-8 -4.5"/>
+            <path d="M16 5.25l-8 4.5"/>
+          </g>
+        </symbol>
+        <!-- key (IAM / OIDC) — Tabler Icons / `key` -->
+        <symbol id="icon-key" viewBox="0 0 24 24">
+          <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16.555 3.843l3.602 3.602a2.877 2.877 0 0 1 0 4.069l-2.643 2.643a2.877 2.877 0 0 1 -4.069 0l-.301 -.301l-6.558 6.558a2 2 0 0 1 -1.239 .578l-.175 .008h-1.172a1 1 0 0 1 -.993 -.883l-.007 -.117v-1.172a2 2 0 0 1 .467 -1.284l.119 -.13l.414 -.414h2v-2h2v-2l2.144 -2.144l-.301 -.301a2.877 2.877 0 0 1 0 -4.069l2.643 -2.643a2.877 2.877 0 0 1 4.069 0"/>
+            <path d="M15 9h.01"/>
+          </g>
+        </symbol>
+        <!-- alert (SNS / budget alerting) — Tabler Icons / `alert-triangle` -->
+        <symbol id="icon-alert" viewBox="0 0 24 24">
+          <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 9v4"/>
+            <path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0"/>
+            <path d="M12 16h.01"/>
+          </g>
+        </symbol>
       </defs>
 
       <rect width="100%" height="100%" fill="#faf9f6"/>
@@ -126,6 +184,7 @@
       <rect x="40" y="140" width="120" height="64" rx="6" fill="#ffffff" stroke="#16191f" stroke-width="1"/>
       <rect x="48" y="148" width="28" height="12" rx="2" fill="transparent" stroke="rgba(22,25,31,0.40)" stroke-width="0.8"/>
       <text x="62" y="157" fill="#16191f" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EVT</text>
+      <use href="#icon-clock" x="136" y="148" width="16" height="16" color="#16191f"/>
       <text x="100" y="176" fill="#16191f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">EventBridge</text>
       <text x="100" y="192" fill="#545b64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">House + Senate</text>
 
@@ -134,6 +193,7 @@
       <rect x="216" y="140" width="120" height="64" rx="6" fill="#ffffff" stroke="#16191f" stroke-width="1"/>
       <rect x="224" y="148" width="28" height="12" rx="2" fill="transparent" stroke="rgba(22,25,31,0.40)" stroke-width="0.8"/>
       <text x="238" y="157" fill="#16191f" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">LAM</text>
+      <use href="#icon-server" x="312" y="148" width="16" height="16" color="#16191f"/>
       <text x="276" y="176" fill="#16191f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Collect Lambdas</text>
       <text x="276" y="192" fill="#545b64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">House + Senate</text>
 
@@ -142,6 +202,7 @@
       <rect x="392" y="140" width="120" height="64" rx="6" fill="rgba(22,25,31,0.05)" stroke="#545b64" stroke-width="1"/>
       <rect x="400" y="148" width="24" height="12" rx="2" fill="transparent" stroke="rgba(84,91,100,0.50)" stroke-width="0.8"/>
       <text x="412" y="157" fill="#545b64" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">S3</text>
+      <use href="#icon-bucket" x="488" y="148" width="16" height="16" color="#545b64"/>
       <text x="452" y="176" fill="#16191f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">S3 Bronze</text>
       <text x="452" y="192" fill="#545b64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">raw filings</text>
 
@@ -150,6 +211,7 @@
       <rect x="568" y="140" width="120" height="64" rx="6" fill="#ffffff" stroke="#16191f" stroke-width="1"/>
       <rect x="576" y="148" width="28" height="12" rx="2" fill="transparent" stroke="rgba(22,25,31,0.40)" stroke-width="0.8"/>
       <text x="590" y="157" fill="#16191f" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SQS</text>
+      <use href="#icon-queue" x="664" y="148" width="16" height="16" color="#16191f"/>
       <text x="628" y="176" fill="#16191f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Extract queue</text>
       <text x="628" y="192" fill="#545b64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">+ DLQ</text>
 
@@ -158,6 +220,7 @@
       <rect x="744" y="140" width="140" height="64" rx="6" fill="rgba(255,153,0,0.08)" stroke="#ff9900" stroke-width="1"/>
       <rect x="752" y="148" width="28" height="12" rx="2" fill="transparent" stroke="rgba(255,153,0,0.50)" stroke-width="0.8"/>
       <text x="766" y="157" fill="#ff9900" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">LAM</text>
+      <use href="#icon-server" x="860" y="148" width="16" height="16" color="#ff9900"/>
       <text x="814" y="176" fill="#16191f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Extract Lambda</text>
       <text x="814" y="192" fill="#545b64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">route→ticker→silver</text>
 
@@ -166,6 +229,7 @@
       <rect x="940" y="140" width="120" height="64" rx="6" fill="rgba(22,25,31,0.05)" stroke="#545b64" stroke-width="1"/>
       <rect x="948" y="148" width="24" height="12" rx="2" fill="transparent" stroke="rgba(84,91,100,0.50)" stroke-width="0.8"/>
       <text x="960" y="157" fill="#545b64" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">S3</text>
+      <use href="#icon-bucket" x="1036" y="148" width="16" height="16" color="#545b64"/>
       <text x="1000" y="176" fill="#16191f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">S3 Silver</text>
       <text x="1000" y="192" fill="#545b64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">filings + txns</text>
 
@@ -174,6 +238,7 @@
       <rect x="434" y="332" width="120" height="64" rx="6" fill="rgba(22,25,31,0.02)" stroke="rgba(22,25,31,0.20)" stroke-width="0.8" stroke-dasharray="4,3"/>
       <rect x="442" y="340" width="24" height="12" rx="2" fill="transparent" stroke="rgba(22,25,31,0.30)" stroke-width="0.8"/>
       <text x="454" y="349" fill="#545b64" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">ECR</text>
+      <use href="#icon-container" x="530" y="340" width="16" height="16" color="#545b64"/>
       <text x="494" y="368" fill="#16191f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ECR</text>
       <text x="494" y="384" fill="#545b64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">container images</text>
 
@@ -182,6 +247,7 @@
       <rect x="578" y="332" width="120" height="64" rx="6" fill="rgba(22,25,31,0.02)" stroke="rgba(22,25,31,0.20)" stroke-width="0.8" stroke-dasharray="4,3"/>
       <rect x="586" y="340" width="24" height="12" rx="2" fill="transparent" stroke="rgba(22,25,31,0.30)" stroke-width="0.8"/>
       <text x="598" y="349" fill="#545b64" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">IAM</text>
+      <use href="#icon-key" x="674" y="340" width="16" height="16" color="#545b64"/>
       <text x="638" y="368" fill="#16191f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">IAM / OIDC</text>
       <text x="638" y="384" fill="#545b64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">GH Actions CI/CD</text>
 
@@ -190,6 +256,7 @@
       <rect x="722" y="332" width="120" height="64" rx="6" fill="rgba(22,25,31,0.02)" stroke="rgba(22,25,31,0.20)" stroke-width="0.8" stroke-dasharray="4,3"/>
       <rect x="730" y="340" width="24" height="12" rx="2" fill="transparent" stroke="rgba(22,25,31,0.30)" stroke-width="0.8"/>
       <text x="742" y="349" fill="#545b64" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SNS</text>
+      <use href="#icon-alert" x="818" y="340" width="16" height="16" color="#545b64"/>
       <text x="782" y="368" fill="#16191f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">SNS + Budget</text>
       <text x="782" y="384" fill="#545b64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">cost alerts</text>
 
