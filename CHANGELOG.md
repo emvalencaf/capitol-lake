@@ -7,6 +7,18 @@ heading when `development` is released to `master`.
 
 ## [Unreleased]
 
+### Fixed
+
+- `infra`: `house-collect`/`senate-collect`/`senate-collect-automated`'s IAM
+  role was missing `s3:ListBucket` on the Bronze bucket (only had
+  `GetObject`/`PutObject` scoped to `bronze/*`). Each collector's
+  idempotent-skip check GetObjects a meta key that legitimately doesn't
+  exist yet on a filing's first run; without `ListBucket`, S3 can't
+  distinguish that caller from one probing for the key's existence, so it
+  returns 403 `AccessDenied` instead of 404 `NoSuchKey` — failing every
+  first invocation. Added a `BronzeList` statement granting `ListBucket` on
+  the bucket itself (not `/*`) to the 3 collector roles.
+
 ### Added
 
 - `scripts/invoke-collectors.sh`: manually invokes `capitol-lake-house-collect`

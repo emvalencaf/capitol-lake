@@ -86,6 +86,18 @@ data "aws_iam_policy_document" "collect_s3" {
     actions   = ["s3:GetObject", "s3:PutObject"]
     resources = ["${var.bronze_bucket_arn}/*"]
   }
+
+  # Each collector's idempotent-skip check (read_existing_sha256) GetObjects
+  # a meta key that legitimately doesn't exist yet on a filing's first run.
+  # Without s3:ListBucket on the bucket itself, S3 can't tell the caller
+  # apart from someone probing for the key's existence, so it returns 403
+  # AccessDenied instead of 404 NoSuchKey — this statement is what lets a
+  # missing key actually come back as "not found".
+  statement {
+    sid       = "BronzeList"
+    actions   = ["s3:ListBucket"]
+    resources = [var.bronze_bucket_arn]
+  }
 }
 
 data "aws_iam_policy_document" "extract_s3" {
