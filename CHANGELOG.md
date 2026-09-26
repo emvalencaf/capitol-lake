@@ -9,6 +9,13 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- `docs/architecture.md`: narrative architecture overview of the pipeline
+  (House/Senate collect, extract routing, ticker/LLM fallback, quality
+  gate, Bronze -> Silver writes), cross-referencing ADRs 0001, 0002, 0003,
+  0008, 0009, 0011, 0012 and 0013. Embeds two `diagram-design` diagrams: an
+  AWS system architecture diagram and a Bronze -> Silver data-flow diagram
+  by pipeline stage. Editable sources live under `docs/diagrams/raw/`,
+  rendered SVG assets under `docs/diagrams/assets/`. (#76)
 - `extract_senate_filing` (`stages/extract.py`), a Senate counterpart to
   `extract_house_filing`: parses a Senate `/ptr/` filing page
   (`stages/senate_extract.py`, new `beautifulsoup4`/`lxml` dependency) and
