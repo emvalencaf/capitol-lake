@@ -9,6 +9,49 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- Root README: links from About The Project, Getting Started, and Usage to
+  `docs/architecture.md`, `docs/cost.md`, `docs/metrics.md`, and
+  `infra/README.md`. No new top-level section; existing structure, the
+  `readme-top` anchor, and back-to-top links are unchanged. (#81)
+- `.wiki/` current-state concepts (28 concepts, `okf_validate.py --strict`
+  passing): an architecture-overview concept indexing `docs/architecture.md`
+  and its five pipeline-stage concepts (collect, extract, ticker
+  resolution/LLM fallback, quality gate, Silver write); twelve domain-term
+  concepts covering `CONTEXT.md`'s vocabulary (disclosures, dates, layers);
+  and one decision concept per existing ADR (0001, 0002, 0003, 0008, 0009,
+  0010, 0011, 0012, 0013), summarizing each's decision and cross-linking back
+  to the ADR file rather than restating its reasoning. Purely additive from
+  current state forward, no `backfill` run. (#80)
+- `docs/metrics.md`: extraction-accuracy metrics doc sourced from the
+  `eval/` harness (per-field scores for House digital, House scanned,
+  Senate HTML) and this changelog. Every number is labeled eval-harness/
+  gold-set data with an explicit statement that the pipeline has never run
+  against real AWS infrastructure; the scanned-House column's uniform 0.10
+  is called out as a tesseract-absence extraction-failure artifact (this
+  sandbox has no `tesseract` binary), not a real accuracy figure. House
+  digital numbers come from a fresh re-run rather than `eval/README.md`'s
+  own first-run snapshot, which predates #57's fix (#65) and is now stale
+  (all 30 digital filings extract successfully today, not 28). (#78)
+- `docs/cost.md`: AWS cost estimate built from a real
+  [AWS Pricing Calculator](https://calculator.aws) estimate (shareable link
+  included), splitting fixed scheduling cost (House/Senate collector
+  Lambdas, 365 EventBridge invocations/year each) from per-filing processing
+  cost (`extract`'s ticker/LLM-fallback/silver-write, S3, SQS). House volume
+  cited to ADR 0008 (~451-515 PTRs/year); Senate volume derived from
+  `eval/README.md`'s 661-match eFD search window and labeled an estimate
+  (~55-60 PTRs/year). Embeds a `diagram-design` bar chart of estimated cost
+  by stage (`docs/diagrams/raw/cost-by-stage.html` /
+  `docs/diagrams/assets/cost-by-stage.svg`). Notes that EventBridge's
+  default-bus rules aren't billed, that ECR image storage/lifecycle is
+  excluded by deliberate choice given the project's demonstrative scope, and
+  that real invocation durations are assumed pending deployment. (#77)
+- `docs/architecture.md`: narrative architecture overview of the pipeline
+  (House/Senate collect, extract routing, ticker/LLM fallback, quality
+  gate, Bronze -> Silver writes), cross-referencing ADRs 0001, 0002, 0003,
+  0008, 0009, 0011, 0012 and 0013. Embeds two `diagram-design` diagrams: an
+  AWS system architecture diagram and a Bronze -> Silver data-flow diagram
+  by pipeline stage. Editable sources live under `docs/diagrams/raw/`,
+  rendered SVG assets under `docs/diagrams/assets/`. (#76)
 - `extract_senate_filing` (`stages/extract.py`), a Senate counterpart to
   `extract_house_filing`: parses a Senate `/ptr/` filing page
   (`stages/senate_extract.py`, new `beautifulsoup4`/`lxml` dependency) and
