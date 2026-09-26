@@ -19,18 +19,6 @@
     .eyebrow { margin-bottom: 0.5rem; color: var(--muted); font: 500 0.66rem var(--mono); letter-spacing: 0.18em; text-transform: uppercase; }
     h1 { margin-bottom: 1.5rem; color: var(--ink); font: 400 clamp(1.5rem, 2.4vw + 0.75rem, 2rem)/1.15 var(--serif); letter-spacing: -0.02em; }
     svg { display: block; width: 100%; min-width: 728px; }
-    .step-number, .step-label, .lane-label, .role-text, .chip-text, .legend-label { font-family: var(--mono); text-anchor: middle; }
-    .step-number { fill: var(--ink); font-size: 7px; font-weight: 600; }
-    .step-label { fill: var(--muted); font-size: 7px; font-weight: 500; letter-spacing: 0.12em; }
-    .lane-label { fill: var(--muted); font-size: 8px; font-weight: 500; letter-spacing: 0.14em; }
-    .role-text { fill: var(--ink); font-size: 6px; font-weight: 600; }
-    .node-title { fill: var(--ink); font: 600 9px var(--sans); text-anchor: middle; }
-    .node-sub { fill: var(--muted); font: 400 6.5px var(--mono); text-anchor: middle; }
-    .node-tool { fill: var(--soft); font: 400 6.5px var(--mono); text-anchor: middle; }
-    .chip-text { fill: #fff; font-size: 5px; font-weight: 700; }
-    .focal-text { fill: var(--accent); }
-    .legend-label { fill: var(--muted); font-size: 7px; font-weight: 500; letter-spacing: 0.12em; text-anchor: end; }
-    .legend-text { fill: var(--muted); font: 400 7px var(--sans); }
   </style>
 </head>
 <body>
@@ -38,6 +26,14 @@
     <p class="eyebrow">Data flow · Capitol Lake</p>
     <h1>Bronze to silver, by pipeline stage</h1>
 
+    <!--
+      Every text element below carries its font/fill/anchor as inline SVG
+      attributes rather than a CSS class. This diagram is exported to a
+      standalone .svg (docs/diagrams/assets/) that is loaded as an <img>,
+      not as part of this page — a class defined only in this file's
+      <head><style> would not exist there, and text would fall back to the
+      browser's default styling (16px black) and overflow every box.
+    -->
     <svg viewBox="0 0 840 356" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="data-flow-title data-flow-desc">
       <title id="data-flow-title">Capitol Lake bronze-to-silver data flow</title>
       <desc id="data-flow-desc">House and Senate each collect and extract their own filings into
@@ -61,17 +57,28 @@
       <line x1="0" y1="276" x2="840" y2="276" stroke="rgba(22,25,31,0.12)" stroke-width="0.8"/>
       <line x1="140" y1="36" x2="140" y2="276" stroke="rgba(22,25,31,0.12)" stroke-width="0.8"/>
 
-      <g aria-label="Pipeline steps">
-        <rect x="180" y="6" width="32" height="16" rx="8" fill="rgba(22,25,31,0.12)"/><text x="196" y="14" class="step-number">01</text><text x="196" y="29" class="step-label">COLLECT</text>
-        <rect x="404" y="6" width="32" height="16" rx="8" fill="rgba(22,25,31,0.12)"/><text x="420" y="14" class="step-number">02</text><text x="420" y="29" class="step-label">EXTRACT</text>
-        <rect x="634" y="6" width="32" height="16" rx="8" fill="rgba(255,153,0,0.20)"/><text x="650" y="14" class="step-number focal-text">03</text><text x="650" y="29" class="step-label focal-text">TICKER + QUALITY</text>
-        <rect x="784" y="6" width="32" height="16" rx="8" fill="rgba(22,25,31,0.12)"/><text x="800" y="14" class="step-number">04</text><text x="800" y="29" class="step-label">SILVER WRITE</text>
+      <g aria-label="Pipeline steps" font-family="'Geist Mono', monospace" text-anchor="middle">
+        <rect x="180" y="6" width="32" height="16" rx="8" fill="rgba(22,25,31,0.12)"/>
+        <text x="196" y="14" fill="#16191f" font-size="7" font-weight="600">01</text>
+        <text x="196" y="29" fill="#545b64" font-size="7" font-weight="500" letter-spacing="0.12em">COLLECT</text>
+
+        <rect x="404" y="6" width="32" height="16" rx="8" fill="rgba(22,25,31,0.12)"/>
+        <text x="420" y="14" fill="#16191f" font-size="7" font-weight="600">02</text>
+        <text x="420" y="29" fill="#545b64" font-size="7" font-weight="500" letter-spacing="0.12em">EXTRACT</text>
+
+        <rect x="634" y="6" width="32" height="16" rx="8" fill="rgba(255,153,0,0.20)"/>
+        <text x="650" y="14" fill="#ff9900" font-size="7" font-weight="600">03</text>
+        <text x="650" y="29" fill="#ff9900" font-size="7" font-weight="500" letter-spacing="0.12em">TICKER + QUALITY</text>
+
+        <rect x="784" y="6" width="32" height="16" rx="8" fill="rgba(22,25,31,0.12)"/>
+        <text x="800" y="14" fill="#16191f" font-size="7" font-weight="600">04</text>
+        <text x="800" y="29" fill="#545b64" font-size="7" font-weight="500" letter-spacing="0.12em">SILVER WRITE</text>
       </g>
 
-      <g aria-label="Chamber / role lanes">
-        <text x="70" y="72" class="lane-label">HOUSE</text>
-        <text x="70" y="152" class="lane-label">SENATE</text>
-        <text x="70" y="232" class="lane-label">SHARED</text><text x="70" y="244" class="lane-label">PIPELINE</text>
+      <g aria-label="Chamber / role lanes" fill="#545b64" font-family="'Geist Mono', monospace" font-size="8" font-weight="500" letter-spacing="0.14em" text-anchor="middle">
+        <text x="70" y="72">HOUSE</text>
+        <text x="70" y="152">SENATE</text>
+        <text x="70" y="232">SHARED</text><text x="70" y="244">PIPELINE</text>
       </g>
 
       <!-- Connectors first. Cross-lane paths use r=8 orthogonal elbows. -->
@@ -91,61 +98,107 @@
 
       <!-- House: Collect -->
       <rect x="146" y="44" width="100" height="64" rx="6" fill="#faf9f6" stroke="rgba(22,25,31,0.25)"/>
-      <rect x="150" y="48" width="18" height="10" rx="3" fill="rgba(22,25,31,0.12)"/><text x="159" y="53" class="role-text">HSE</text>
-      <text x="196" y="67" class="node-title">House collect</text><text x="196" y="79" class="node-sub">digital + scanned</text><text x="196" y="91" class="node-tool">EventBridge daily</text>
-      <rect x="226" y="98" width="16" height="8" rx="3" fill="#5e7a9b"/><text x="234" y="104" class="chip-text">DB</text>
+      <rect x="150" y="48" width="18" height="10" rx="3" fill="rgba(22,25,31,0.12)"/>
+      <text x="159" y="53" fill="#16191f" font-family="'Geist Mono', monospace" font-size="6" font-weight="600" text-anchor="middle">HSE</text>
+      <text x="196" y="67" fill="#16191f" font-family="'Geist', sans-serif" font-size="9" font-weight="600" text-anchor="middle">House collect</text>
+      <text x="196" y="79" fill="#545b64" font-family="'Geist Mono', monospace" font-size="6.5" text-anchor="middle">digital + scanned</text>
+      <text x="196" y="91" fill="#7d8998" font-family="'Geist Mono', monospace" font-size="6.5" text-anchor="middle">EventBridge daily</text>
+      <rect x="226" y="98" width="16" height="8" rx="3" fill="#5e7a9b"/>
+      <text x="234" y="104" fill="#ffffff" font-family="'Geist Mono', monospace" font-size="5" font-weight="700" text-anchor="middle">DB</text>
 
       <!-- House: Route & extract -->
       <rect x="370" y="44" width="100" height="64" rx="6" fill="#faf9f6" stroke="rgba(22,25,31,0.25)"/>
-      <rect x="374" y="48" width="18" height="10" rx="3" fill="rgba(22,25,31,0.12)"/><text x="383" y="53" class="role-text">HSE</text>
-      <text x="420" y="67" class="node-title">Route &amp; extract</text><text x="420" y="79" class="node-sub">digital vs scanned</text><text x="420" y="91" class="node-tool">extract_house_filing</text>
-      <rect x="374" y="98" width="16" height="8" rx="3" fill="#5e7a9b"/><text x="382" y="104" class="chip-text">DB</text>
-      <rect x="450" y="98" width="16" height="8" rx="3" fill="#b8915a"/><text x="458" y="104" class="chip-text">TB</text>
+      <rect x="374" y="48" width="18" height="10" rx="3" fill="rgba(22,25,31,0.12)"/>
+      <text x="383" y="53" fill="#16191f" font-family="'Geist Mono', monospace" font-size="6" font-weight="600" text-anchor="middle">HSE</text>
+      <text x="420" y="67" fill="#16191f" font-family="'Geist', sans-serif" font-size="9" font-weight="600" text-anchor="middle">Route &amp; extract</text>
+      <text x="420" y="79" fill="#545b64" font-family="'Geist Mono', monospace" font-size="6.5" text-anchor="middle">digital vs scanned</text>
+      <text x="420" y="91" fill="#7d8998" font-family="'Geist Mono', monospace" font-size="6.5" text-anchor="middle">extract_house_filing</text>
+      <rect x="374" y="98" width="16" height="8" rx="3" fill="#5e7a9b"/>
+      <text x="382" y="104" fill="#ffffff" font-family="'Geist Mono', monospace" font-size="5" font-weight="700" text-anchor="middle">DB</text>
+      <rect x="450" y="98" width="16" height="8" rx="3" fill="#b8915a"/>
+      <text x="458" y="104" fill="#ffffff" font-family="'Geist Mono', monospace" font-size="5" font-weight="700" text-anchor="middle">TB</text>
 
       <!-- Senate: Collect -->
       <rect x="146" y="124" width="100" height="64" rx="6" fill="#faf9f6" stroke="rgba(22,25,31,0.25)"/>
-      <rect x="150" y="128" width="18" height="10" rx="3" fill="rgba(22,25,31,0.12)"/><text x="159" y="133" class="role-text">SEN</text>
-      <text x="196" y="147" class="node-title">Senate collect</text><text x="196" y="159" class="node-sub">automated + manual</text><text x="196" y="171" class="node-tool">Lambda / human eFD</text>
-      <rect x="226" y="178" width="16" height="8" rx="3" fill="#5e7a9b"/><text x="234" y="184" class="chip-text">DB</text>
+      <rect x="150" y="128" width="18" height="10" rx="3" fill="rgba(22,25,31,0.12)"/>
+      <text x="159" y="133" fill="#16191f" font-family="'Geist Mono', monospace" font-size="6" font-weight="600" text-anchor="middle">SEN</text>
+      <text x="196" y="147" fill="#16191f" font-family="'Geist', sans-serif" font-size="9" font-weight="600" text-anchor="middle">Senate collect</text>
+      <text x="196" y="159" fill="#545b64" font-family="'Geist Mono', monospace" font-size="6.5" text-anchor="middle">automated + manual</text>
+      <text x="196" y="171" fill="#7d8998" font-family="'Geist Mono', monospace" font-size="6.5" text-anchor="middle">Lambda / human eFD</text>
+      <rect x="226" y="178" width="16" height="8" rx="3" fill="#5e7a9b"/>
+      <text x="234" y="184" fill="#ffffff" font-family="'Geist Mono', monospace" font-size="5" font-weight="700" text-anchor="middle">DB</text>
 
       <!-- Senate: HTML extract -->
       <rect x="370" y="124" width="100" height="64" rx="6" fill="#faf9f6" stroke="rgba(22,25,31,0.25)"/>
-      <rect x="374" y="128" width="18" height="10" rx="3" fill="rgba(22,25,31,0.12)"/><text x="383" y="133" class="role-text">SEN</text>
-      <text x="420" y="147" class="node-title">HTML extract</text><text x="420" y="159" class="node-sub">no OCR, one parser</text><text x="420" y="171" class="node-tool">extract_senate_filing</text>
-      <rect x="374" y="178" width="16" height="8" rx="3" fill="#5e7a9b"/><text x="382" y="184" class="chip-text">DB</text>
-      <rect x="450" y="178" width="16" height="8" rx="3" fill="#b8915a"/><text x="458" y="184" class="chip-text">TB</text>
+      <rect x="374" y="128" width="18" height="10" rx="3" fill="rgba(22,25,31,0.12)"/>
+      <text x="383" y="133" fill="#16191f" font-family="'Geist Mono', monospace" font-size="6" font-weight="600" text-anchor="middle">SEN</text>
+      <text x="420" y="147" fill="#16191f" font-family="'Geist', sans-serif" font-size="9" font-weight="600" text-anchor="middle">HTML extract</text>
+      <text x="420" y="159" fill="#545b64" font-family="'Geist Mono', monospace" font-size="6.5" text-anchor="middle">no OCR, one parser</text>
+      <text x="420" y="171" fill="#7d8998" font-family="'Geist Mono', monospace" font-size="6.5" text-anchor="middle">extract_senate_filing</text>
+      <rect x="374" y="178" width="16" height="8" rx="3" fill="#5e7a9b"/>
+      <text x="382" y="184" fill="#ffffff" font-family="'Geist Mono', monospace" font-size="5" font-weight="700" text-anchor="middle">DB</text>
+      <rect x="450" y="178" width="16" height="8" rx="3" fill="#b8915a"/>
+      <text x="458" y="184" fill="#ffffff" font-family="'Geist Mono', monospace" font-size="5" font-weight="700" text-anchor="middle">TB</text>
 
       <!-- Shared: Ticker + LLM fallback + quality gate (focal) -->
       <rect x="594" y="204" width="112" height="64" rx="6" fill="rgba(255,153,0,0.07)" stroke="#ff9900" stroke-width="1.2"/>
-      <rect x="598" y="208" width="18" height="10" rx="3" fill="rgba(255,153,0,0.20)"/><text x="607" y="213" class="role-text focal-text">PIPE</text>
-      <text x="650" y="227" class="node-title">Ticker + LLM +</text><text x="650" y="237" class="node-title">quality gate</text><text x="650" y="251" class="node-tool">ticker_resolve · llm_fallback</text>
-      <rect x="598" y="258" width="16" height="8" rx="3" fill="#b8915a"/><text x="606" y="264" class="chip-text">TB</text>
-      <rect x="682" y="258" width="16" height="8" rx="3" fill="#b8915a"/><text x="690" y="264" class="chip-text">TB</text>
+      <rect x="598" y="208" width="18" height="10" rx="3" fill="rgba(255,153,0,0.20)"/>
+      <text x="607" y="213" fill="#ff9900" font-family="'Geist Mono', monospace" font-size="6" font-weight="600" text-anchor="middle">PIPE</text>
+      <text x="650" y="227" fill="#16191f" font-family="'Geist', sans-serif" font-size="9" font-weight="600" text-anchor="middle">Ticker + LLM +</text>
+      <text x="650" y="237" fill="#16191f" font-family="'Geist', sans-serif" font-size="9" font-weight="600" text-anchor="middle">quality gate</text>
+      <text x="650" y="251" fill="#7d8998" font-family="'Geist Mono', monospace" font-size="6.5" text-anchor="middle">ticker_resolve · llm_fallback</text>
+      <rect x="598" y="258" width="16" height="8" rx="3" fill="#b8915a"/>
+      <text x="606" y="264" fill="#ffffff" font-family="'Geist Mono', monospace" font-size="5" font-weight="700" text-anchor="middle">TB</text>
+      <rect x="682" y="258" width="16" height="8" rx="3" fill="#b8915a"/>
+      <text x="690" y="264" fill="#ffffff" font-family="'Geist Mono', monospace" font-size="5" font-weight="700" text-anchor="middle">TB</text>
 
       <!-- Shared: Silver write -->
       <rect x="768" y="204" width="64" height="64" rx="6" fill="#faf9f6" stroke="rgba(22,25,31,0.25)"/>
-      <rect x="772" y="208" width="18" height="10" rx="3" fill="rgba(22,25,31,0.12)"/><text x="781" y="213" class="role-text">PIPE</text>
-      <text x="800" y="230" class="node-title" font-size="8">Silver</text><text x="800" y="240" class="node-title" font-size="8">write</text>
-      <text x="800" y="252" class="node-tool" font-size="6">part-&lt;doc_id&gt;</text>
-      <rect x="772" y="258" width="16" height="8" rx="3" fill="#b8915a"/><text x="780" y="264" class="chip-text">TB</text>
+      <rect x="772" y="208" width="18" height="10" rx="3" fill="rgba(22,25,31,0.12)"/>
+      <text x="781" y="213" fill="#16191f" font-family="'Geist Mono', monospace" font-size="6" font-weight="600" text-anchor="middle">PIPE</text>
+      <text x="800" y="230" fill="#16191f" font-family="'Geist', sans-serif" font-size="8" font-weight="600" text-anchor="middle">Silver</text>
+      <text x="800" y="240" fill="#16191f" font-family="'Geist', sans-serif" font-size="8" font-weight="600" text-anchor="middle">write</text>
+      <text x="800" y="252" fill="#7d8998" font-family="'Geist Mono', monospace" font-size="6" text-anchor="middle">part-&lt;doc_id&gt;</text>
+      <rect x="772" y="258" width="16" height="8" rx="3" fill="#b8915a"/>
+      <text x="780" y="264" fill="#ffffff" font-family="'Geist Mono', monospace" font-size="5" font-weight="700" text-anchor="middle">TB</text>
 
       <!-- Legend: steps -->
-      <text x="164" y="293" class="legend-label">STEPS</text>
-      <rect x="180" y="284" width="24" height="12" rx="6" fill="rgba(22,25,31,0.12)"/><text x="192" y="292" class="step-number">01</text><text x="212" y="293" class="legend-text">Collect</text>
-      <rect x="280" y="284" width="24" height="12" rx="6" fill="rgba(22,25,31,0.12)"/><text x="292" y="292" class="step-number">02</text><text x="312" y="293" class="legend-text">Extract</text>
-      <rect x="380" y="284" width="24" height="12" rx="6" fill="rgba(255,153,0,0.20)"/><text x="392" y="292" class="step-number focal-text">03</text><text x="412" y="293" class="legend-text">Ticker + quality</text>
-      <rect x="540" y="284" width="24" height="12" rx="6" fill="rgba(22,25,31,0.12)"/><text x="552" y="292" class="step-number">04</text><text x="572" y="293" class="legend-text">Silver write</text>
+      <text x="164" y="293" fill="#545b64" font-family="'Geist Mono', monospace" font-size="7" font-weight="500" letter-spacing="0.12em" text-anchor="end">STEPS</text>
+      <rect x="180" y="284" width="24" height="12" rx="6" fill="rgba(22,25,31,0.12)"/>
+      <text x="192" y="292" fill="#16191f" font-family="'Geist Mono', monospace" font-size="7" font-weight="600" text-anchor="middle">01</text>
+      <text x="212" y="293" fill="#545b64" font-family="'Geist', sans-serif" font-size="7">Collect</text>
+
+      <rect x="280" y="284" width="24" height="12" rx="6" fill="rgba(22,25,31,0.12)"/>
+      <text x="292" y="292" fill="#16191f" font-family="'Geist Mono', monospace" font-size="7" font-weight="600" text-anchor="middle">02</text>
+      <text x="312" y="293" fill="#545b64" font-family="'Geist', sans-serif" font-size="7">Extract</text>
+
+      <rect x="380" y="284" width="24" height="12" rx="6" fill="rgba(255,153,0,0.20)"/>
+      <text x="392" y="292" fill="#ff9900" font-family="'Geist Mono', monospace" font-size="7" font-weight="600" text-anchor="middle">03</text>
+      <text x="412" y="293" fill="#545b64" font-family="'Geist', sans-serif" font-size="7">Ticker + quality</text>
+
+      <rect x="540" y="284" width="24" height="12" rx="6" fill="rgba(22,25,31,0.12)"/>
+      <text x="552" y="292" fill="#16191f" font-family="'Geist Mono', monospace" font-size="7" font-weight="600" text-anchor="middle">04</text>
+      <text x="572" y="293" fill="#545b64" font-family="'Geist', sans-serif" font-size="7">Silver write</text>
 
       <!-- Legend: data types -->
-      <text x="164" y="314" class="legend-label">DATA TYPE</text>
-      <rect x="180" y="306" width="16" height="8" rx="3" fill="#5e7a9b"/><text x="188" y="312" class="chip-text">DB</text><text x="202" y="314" class="legend-text">Bronze file</text>
-      <rect x="280" y="306" width="16" height="8" rx="3" fill="#b8915a"/><text x="288" y="312" class="chip-text">TB</text><text x="302" y="314" class="legend-text">Silver row</text>
-      <text x="380" y="314" class="legend-text">left chip = input · right chip = output</text>
+      <text x="164" y="314" fill="#545b64" font-family="'Geist Mono', monospace" font-size="7" font-weight="500" letter-spacing="0.12em" text-anchor="end">DATA TYPE</text>
+      <rect x="180" y="306" width="16" height="8" rx="3" fill="#5e7a9b"/>
+      <text x="188" y="312" fill="#ffffff" font-family="'Geist Mono', monospace" font-size="5" font-weight="700" text-anchor="middle">DB</text>
+      <text x="202" y="314" fill="#545b64" font-family="'Geist', sans-serif" font-size="7">Bronze file</text>
+
+      <rect x="280" y="306" width="16" height="8" rx="3" fill="#b8915a"/>
+      <text x="288" y="312" fill="#ffffff" font-family="'Geist Mono', monospace" font-size="5" font-weight="700" text-anchor="middle">TB</text>
+      <text x="302" y="314" fill="#545b64" font-family="'Geist', sans-serif" font-size="7">Silver row</text>
+
+      <text x="380" y="314" fill="#545b64" font-family="'Geist', sans-serif" font-size="7">left chip = input · right chip = output</text>
 
       <!-- Legend: flow -->
-      <text x="164" y="336" class="legend-label">FLOW</text>
-      <line x1="180" y1="333" x2="204" y2="333" stroke="#545b64" marker-end="url(#arr-muted)"/><text x="212" y="336" class="legend-text">Standard hand-off</text>
-      <line x1="340" y1="333" x2="364" y2="333" stroke="#ff9900" stroke-width="1.2" marker-end="url(#arr-accent)"/><text x="372" y="336" class="legend-text">Focal hand-off (transaction rows)</text>
+      <text x="164" y="336" fill="#545b64" font-family="'Geist Mono', monospace" font-size="7" font-weight="500" letter-spacing="0.12em" text-anchor="end">FLOW</text>
+      <line x1="180" y1="333" x2="204" y2="333" stroke="#545b64" marker-end="url(#arr-muted)"/>
+      <text x="212" y="336" fill="#545b64" font-family="'Geist', sans-serif" font-size="7">Standard hand-off</text>
+
+      <line x1="340" y1="333" x2="364" y2="333" stroke="#ff9900" stroke-width="1.2" marker-end="url(#arr-accent)"/>
+      <text x="372" y="336" fill="#545b64" font-family="'Geist', sans-serif" font-size="7">Focal hand-off (transaction rows)</text>
     </svg>
   </main>
 </body>
