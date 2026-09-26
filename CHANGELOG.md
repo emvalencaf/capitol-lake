@@ -9,6 +9,10 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- Root README: links from About The Project, Getting Started, and Usage to
+  `docs/architecture.md`, `docs/cost.md`, `docs/metrics.md`, and
+  `infra/README.md`. No new top-level section; existing structure, the
+  `readme-top` anchor, and back-to-top links are unchanged. (#81)
 - `.wiki/` current-state concepts (28 concepts, `okf_validate.py --strict`
   passing): an architecture-overview concept indexing `docs/architecture.md`
   and its five pipeline-stage concepts (collect, extract, ticker

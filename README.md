@@ -43,7 +43,8 @@
 
 ## About The Project
 
-Data engineering pipeline.
+Data engineering pipeline. See [`docs/architecture.md`](docs/architecture.md)
+for the architecture overview and diagrams.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -80,6 +81,9 @@ Data engineering pipeline.
    uv sync
    ```
 
+For a production deploy, see [`infra/README.md`](infra/README.md); for the
+associated AWS cost estimate, see [`docs/cost.md`](docs/cost.md).
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Usage
@@ -94,7 +98,8 @@ Pipeline stages follow a pure-function-plus-handler convention and run
 locally against a MinIO stand-in for S3, with each stage's Lambda handler
 runnable through the Lambda Runtime Interface Emulator exactly as it will
 run in AWS. See [`docs/local-dev.md`](docs/local-dev.md) for the full
-conventions and how to bring up the local stack.
+conventions and how to bring up the local stack, and
+[`docs/metrics.md`](docs/metrics.md) for extraction-accuracy metrics.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
