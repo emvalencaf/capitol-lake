@@ -100,6 +100,28 @@ services:
       minio-init:
         condition: service_completed_successfully
 
+  # Automated Senate collector (#68): drives the full eFD PTR search-and-
+  # fetch flow itself via headless Playwright (#67) instead of requiring a
+  # human-captured search response. Packaged from a non-AWS base image
+  # (docker/senate_collect_automated.Dockerfile) for the same reason
+  # extract-stage is, since Playwright's Chromium needs real shared
+  # libraries the AWS Lambda base image doesn't carry. See docs/local-dev.md.
+  senate-collect-automated-stage:
+    build:
+      context: .
+      dockerfile: docker/senate_collect_automated.Dockerfile
+    ports:
+      - "9104:8080"
+    environment:
+      AWS_ENDPOINT_URL_S3: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_REGION: us-east-1
+      BRONZE_BUCKET: bronze
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
   # Extraction: routes a House PTR to its extractor and writes both silver
   # Parquet parts. Packaged from a non-AWS base image (docker/extract.Dockerfile)
   # since it's the one stage needing Tesseract, which the AWS Lambda base image

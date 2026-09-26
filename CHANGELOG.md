@@ -9,6 +9,21 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- Automated Senate collector Lambda handler and image (#68):
+  `handlers/senate_collect_automated_handler.py` wires #67's
+  `run_senate_efd_session` flow to a real `boto3` S3 client, following the
+  same thin/untested handler convention as every other stage; it takes no
+  `event["response"]` capture since the browser session drives the search
+  itself, and never enqueues an SQS message (Senate has no schedule to chain
+  from, per #18). `docker/senate_collect_automated.Dockerfile` packages it
+  like `docker/senate_akamai_probe.Dockerfile`'s alternative-base pattern
+  (`python:3.12-slim` + `awslambdaric` + `aws-lambda-rie` + Playwright
+  Chromium with `PLAYWRIGHT_BROWSERS_PATH` pinned) rather than the plain
+  `docker/lambda.Dockerfile` base, since Playwright's Chromium needs real
+  shared libraries the AWS base image's minimal userland doesn't carry.
+  Demoed locally via RIE against MinIO (`senate-collect-automated-stage` in
+  `docker-compose.yml`, port 9104), per `docs/local-dev.md`. No AWS infra,
+  schedule, or real deploy yet (later ticket).
 - Senate eFD PTR search-and-fetch session (#67): `capitol_lake.browser.senate_efd_session`
   drives one authenticated Playwright session through the full flow —
   warm-up navigation, the `prohibition_agreement` gate accepted via a real
