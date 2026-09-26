@@ -9,6 +9,16 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- `docs/metrics.md`: extraction-accuracy metrics doc sourced from the
+  `eval/` harness (per-field scores for House digital, House scanned,
+  Senate HTML) and this changelog. Every number is labeled eval-harness/
+  gold-set data with an explicit statement that the pipeline has never run
+  against real AWS infrastructure; the scanned-House column's uniform 0.10
+  is called out as a tesseract-absence extraction-failure artifact (this
+  sandbox has no `tesseract` binary), not a real accuracy figure. House
+  digital numbers come from a fresh re-run rather than `eval/README.md`'s
+  own first-run snapshot, which predates #57's fix (#65) and is now stale
+  (all 30 digital filings extract successfully today, not 28). (#78)
 - `docs/cost.md`: AWS cost estimate built from a real
   [AWS Pricing Calculator](https://calculator.aws) estimate (shareable link
   included), splitting fixed scheduling cost (House/Senate collector
