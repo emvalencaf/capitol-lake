@@ -154,9 +154,9 @@ so `event` is unused, and it wires `run_senate_efd_session` to a real
 `extract_queue_message` per bronze key it wrote this run, exactly like
 `senate_collect/handler.py` and `house_collect/handler.py` (ADR-0016).
 
-`docker/senate_collect_automated.Dockerfile` packages it like
-`docker/senate_akamai_probe.Dockerfile` (#29) rather than the plain
-`docker/lambda.Dockerfile` base every stdlib-only stage uses: Playwright's
+`docker/senate_collect_automated.Dockerfile` packages it the way the
+now-retired `senate_akamai_probe` Lambda's Dockerfile did (#29, #70) rather
+than the plain `docker/lambda.Dockerfile` base every stdlib-only stage uses: Playwright's
 Chromium needs real shared libraries the AWS Lambda base image's minimal
 userland doesn't carry, so it follows the same alternative-base-image
 pattern as `docker/extract.Dockerfile` (ADR-0011) — `awslambdaric` and a

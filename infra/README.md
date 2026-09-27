@@ -64,9 +64,8 @@ A plain `terraform apply` fails on a fresh account: every stage's Lambda is
 until the same apply creates it — Terraform errors with "Provide a valid
 source image." `scripts/deploy-infra.sh up` automates the fix (apply the ECR
 repos only, build and push each stage's image from `docker/*.Dockerfile`,
-then apply the rest of the stack), the same three-step dance
-`scripts/deploy-senate-akamai-probe.sh` already does for the standalone probe
-Lambda:
+then apply the rest of the stack), the same three-step dance the now-retired
+senate-akamai-probe standalone Lambda (#70) used to use:
 
 ```bash
 cd ..

@@ -6,8 +6,8 @@
 # Lambda, so `terraform apply` fails with "Provide a valid source image."
 # This script applies the ECR repositories first, builds and pushes each
 # stage's image, then applies the rest of the stack — the same three-step
-# dance scripts/deploy-senate-akamai-probe.sh already automates for the
-# standalone probe Lambda, generalized to the 4 stages here.
+# dance the now-retired senate-akamai-probe standalone Lambda used (#70),
+# generalized to the 4 stages here.
 #
 #   scripts/deploy-infra.sh up      init, create ECR repos, build+push images, full apply
 #   scripts/deploy-infra.sh plan    init, terraform plan (no image build/push)
@@ -109,8 +109,8 @@ case "$cmd" in
     tf apply -input=false -auto-approve \
       -var="finops_alert_email=${FINOPS_ALERT_EMAIL}"
 
-    # Every stage's image_uri uses the mutable ":latest" tag (same
-    # limitation scripts/deploy-senate-akamai-probe.sh documents), so
+    # Every stage's image_uri uses the mutable ":latest" tag (the same
+    # limitation the now-retired senate-akamai-probe script documented), so
     # re-running `up` after a code fix pushes a new digest behind the same
     # string — Terraform sees no diff and won't redeploy it. Force each
     # Lambda onto the just-pushed image explicitly; harmless when the

@@ -126,6 +126,20 @@ heading when `development` is released to `master`.
   `bronze/`/`silver/` prefixes and every collector enqueues onto SQS
   directly (ADR-0016).
 
+### Removed
+
+- `senate_akamai_probe` (`src/senate_akamai_probe/`,
+  `infra/probes/senate-akamai-probe/`, `docker/senate_akamai_probe.Dockerfile`,
+  `scripts/deploy-senate-akamai-probe.sh`, `tests/units/senate_akamai_probe/`):
+  retired the throwaway probe now that #29's question is answered (PASS) and
+  #67 moved its reusable logic (the agreement-click flow,
+  `classify_probe_result`) into `src/shared/senate_efd_classification.py` and
+  `src/senate_collect_automated/`. Its AWS Lambda, ECR repository, and IAM
+  role were torn down and confirmed gone before deletion. `pyproject.toml`'s
+  `[tool.hatch.build.targets.wheel].packages` no longer lists it.
+  `docs/local-dev.md` and `docs/research/senate-akamai-lambda-probe.md`
+  updated to stop pointing at it as live infra.
+
 ### Fixed
 
 - `docker/extract-requirements.txt`: missing `beautifulsoup4`/`lxml`, so
