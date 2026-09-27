@@ -70,19 +70,20 @@ Separated from the title by a blank line. Brief, in English:
 
 ### Trailers
 
-Every commit ends with:
+A commit produced by a Claude Code session may end with:
 
 ```
 Session-Id: <session uuid>
 Co-Authored-By: <model name> <noreply@anthropic.com>
 ```
 
-- `Session-Id` is required: the id of the Claude Code session that produced
-  the change. It is the UUID in the session's scratchpad path and transcript
-  filename.
-- `Co-Authored-By` is optional: when present, it names the model that
-  co-authored the commit, exactly as given in the session's attribution
-  instructions.
+Both are optional.
+
+- `Session-Id`, when present, is the id of the Claude Code session that
+  produced the change. It is the UUID in the session's scratchpad path and
+  transcript filename.
+- `Co-Authored-By`, when present, names the model that co-authored the
+  commit, exactly as given in the session's attribution instructions.
 
 ### Example
 
