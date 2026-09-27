@@ -142,6 +142,28 @@ def score_gold_set(filings: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     return {"by_filing": by_filing, "by_kind": by_kind, "overall": overall}
 
 
+def consistency_set(runs: Sequence[Sequence[Mapping[str, Any]]]) -> dict[str, float]:
+    """Per-field agreement across >=2 repeated extractions of the same filing (ADR 0019).
+
+    An LLM extractor's output varies run to run even on identical input, so
+    it can't be scored by the byte-identical determinism check the
+    rule-based extractors use. This is the LLM-extractor analogue instead:
+    `score_filing` is run on every pair of `runs` (treating one run as
+    "gold" and the other as "predicted" — the pairing is symmetric, since
+    neither run is more authoritative than the other), and the pairwise
+    scores are averaged field by field. A field that's 1.0 here means every
+    run agreed on it; a field that's low means the model's answer for it
+    isn't stable, independent of whether it's actually *correct* (that's
+    `score_gold_set`'s job).
+    """
+    if len(runs) < 2:
+        raise ValueError(f"need at least two runs to measure consistency, got {len(runs)}")
+    pair_scores = [
+        score_filing(runs[i], runs[j]) for i in range(len(runs)) for j in range(i + 1, len(runs))
+    ]
+    return score_set(pair_scores)
+
+
 def weakest_fields(scores: Mapping[str, float], *, n: int = 3) -> list[tuple[str, float]]:
     """The `n` lowest-scoring fields of a `{field: score}` mapping, weakest first."""
     return sorted(scores.items(), key=lambda item: item[1])[:n]

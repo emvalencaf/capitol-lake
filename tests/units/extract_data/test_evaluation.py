@@ -1,5 +1,8 @@
+import pytest
+
 from extract_data.evaluation import (
     SCORED_FIELDS,
+    consistency_set,
     score_field,
     score_filing,
     score_gold_set,
@@ -133,3 +136,36 @@ def test_weakest_fields_returns_lowest_scores_first():
     scores = {"owner": 1.0, "description": 0.2, "asset_type": 0.6}
 
     assert weakest_fields(scores, n=2) == [("description", 0.2), ("asset_type", 0.6)]
+
+
+def test_consistency_set_of_identical_runs_scores_perfectly():
+    run = [{"line_no": 1, "owner": "self"}]
+
+    scores = consistency_set([run, run, run])
+
+    assert all(score == 1.0 for score in scores.values())
+
+
+def test_consistency_set_averages_pairwise_disagreement():
+    run_a = [{"line_no": 1, "owner": "self"}]
+    run_b = [{"line_no": 1, "owner": "spouse"}]
+
+    scores = consistency_set([run_a, run_b])
+
+    assert scores["owner"] == 0.0
+
+
+def test_consistency_set_of_three_runs_averages_every_pair():
+    # A/B agree on owner, A/C and B/C don't: 1 agreeing pair out of 3.
+    run_a = [{"line_no": 1, "owner": "self"}]
+    run_b = [{"line_no": 1, "owner": "self"}]
+    run_c = [{"line_no": 1, "owner": "spouse"}]
+
+    scores = consistency_set([run_a, run_b, run_c])
+
+    assert scores["owner"] == pytest.approx(1 / 3)
+
+
+def test_consistency_set_requires_at_least_two_runs():
+    with pytest.raises(ValueError, match="at least two runs"):
+        consistency_set([[{"line_no": 1, "owner": "self"}]])

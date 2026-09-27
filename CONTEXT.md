@@ -48,6 +48,20 @@ _Avoid_: Disclosure date
 The number of days between the Transaction date and the date the Filing was submitted.
 _Avoid_: Delay, reporting delay
 
+### Extraction
+
+**LLM extractor**:
+A third extraction path, alongside the digital and scanned extractors, that asks an LLM to read a Filing from scratch and produce its Transactions directly, for benchmarking against the rule-based extractors. Not part of the production extraction pipeline.
+_Avoid_: LLM fallback, AI extractor
+
+**LLM fallback**:
+A gated, per-field second pass applied after a rule-based extractor runs, filling only the fields a Transaction left null or low-confidence. Distinct from the LLM extractor, which never runs after a rule-based extractor and produces every field itself.
+_Avoid_: LLM extractor, AI fallback
+
+**Consistency**:
+For an LLM extractor, agreement between repeated extractions of the same Filing, scored per field and overall by averaging the field-score between every pair of runs. The LLM-extractor analogue of the determinism check used for the rule-based extractors, which instead requires byte-identical output.
+_Avoid_: Determinism (when the extractor is an LLM extractor)
+
 ### Layers
 
 **Bronze**:

@@ -2,7 +2,7 @@
 
 import pytest
 
-from shared.llm_providers import UnknownProviderError, provider_from_env
+from shared.llm_providers import UnknownProviderError, provider_by_name, provider_from_env
 
 
 def test_defaults_to_lm_studio_when_unset(monkeypatch):
@@ -31,3 +31,13 @@ def test_unknown_provider_name_raises():
             provider_from_env()
     finally:
         del os.environ["LLM_FALLBACK_PROVIDER"]
+
+
+@pytest.mark.parametrize("name", ["lm_studio", "gemini", "groq"])
+def test_provider_by_name_selects_named_provider(name):
+    assert provider_by_name(name).name == name
+
+
+def test_provider_by_name_unknown_name_raises():
+    with pytest.raises(UnknownProviderError):
+        provider_by_name("not-a-real-provider")

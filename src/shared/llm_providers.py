@@ -209,10 +209,19 @@ def provider_from_env() -> Provider:
     setting this one environment variable plus that provider's own
     credentials (`GEMINI_API_KEY`, `GROQ_API_KEY`) — no code changes.
     """
-    name = os.environ.get("LLM_FALLBACK_PROVIDER", "lm_studio")
+    return provider_by_name(os.environ.get("LLM_FALLBACK_PROVIDER", "lm_studio"))
+
+
+def provider_by_name(name: str) -> Provider:
+    """The `Provider` named `name` (`lm_studio`, `gemini` or `groq`).
+
+    Used by callers that pick a provider by an explicit argument rather than
+    `LLM_FALLBACK_PROVIDER` (e.g. `scripts/run_house_eval.py --provider`,
+    #89), while still sharing this module's one set of concrete providers.
+    """
     try:
         return _PROVIDERS[name]
     except KeyError:
         raise UnknownProviderError(
-            f"unknown LLM_FALLBACK_PROVIDER {name!r}; choose one of {sorted(_PROVIDERS)}"
+            f"unknown provider {name!r}; choose one of {sorted(_PROVIDERS)}"
         ) from None
