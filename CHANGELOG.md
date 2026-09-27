@@ -117,6 +117,14 @@ heading when `development` is released to `master`.
   UUID. `SenateEfdSessionResult.noop` renamed `.skipped`;
   `senate_collect`/`senate_collect_automated`'s wide-event fields are
   `skipped_count`.
+- `docs/architecture.md`, `docs/diagrams/`: updated the Collect stage
+  description and re-rendered `architecture-system.svg` to match the two
+  changes above — the known-`doc_id`/UUID skip (ADR-0017/0018) and the
+  wide-event/per-item-progress logging (`src/shared/wide_event.py`) — and
+  fixed the system diagram, which still showed separate Bronze/Silver S3
+  buckets and a Senate-only S3-event trigger; both are now one bucket with
+  `bronze/`/`silver/` prefixes and every collector enqueues onto SQS
+  directly (ADR-0016).
 
 ### Fixed
 
