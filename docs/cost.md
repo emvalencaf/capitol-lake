@@ -46,13 +46,13 @@ each duration below is an explicit assumption, not an observed value:
 |---|---|---|---|---|
 | `house-collect` | EventBridge, daily | 512 MB | ~15s (most days: list + no new filing) | 31 invocations |
 | `senate-collect-automated` | EventBridge, daily | 2048 MB | ~60s (worst case is the 900s timeout ceiling; most days finish well under it, per the module's own comment) | 31 invocations |
-| `extract` | SQS (House) / S3 event (Senate) | 1024 MB | ~10s | 47 invocations (~540/yr ÷ 12) |
+| `extract` | SQS (House and Senate, ADR-0016) | 1024 MB | ~10s | 47 invocations (~540/yr ÷ 12) |
 
 The `extract` row's volume is a Lambda-invocation count, not a "both chambers
-are fully processed" claim: Senate's bronze writes already trigger the same
-S3-event target (`infra/modules/scheduling`), so the Lambda genuinely runs
-once per Senate filing too — but architecture.md's implementation note is
-explicit that the handler doesn't yet dispatch a Senate bronze key to the
+are fully processed" claim: Senate's collectors already enqueue onto the
+same SQS queue House does (`infra/modules/pipeline`), so the Lambda genuinely
+runs once per Senate filing too — but architecture.md's implementation note
+is explicit that the handler doesn't yet dispatch a Senate bronze key to the
 Senate extractor, so today those invocations do real House work and no-op
 (or error) on Senate input. The invocation-count math above holds regardless;
 the per-filing *processing* cost will change once that dispatch wiring lands.

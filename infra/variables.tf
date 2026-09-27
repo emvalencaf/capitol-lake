@@ -45,7 +45,7 @@ variable "house_schedule_period_seconds" {
 }
 
 variable "bucket_prefix" {
-  description = "Prefix for the bronze/silver S3 bucket names (must be globally unique in S3)."
+  description = "Name of the single project S3 bucket, holding bronze/silver as key prefixes (must be globally unique in S3)."
   type        = string
   default     = "capitol-lake"
 }

@@ -73,12 +73,18 @@ prefix) or `"scanned"` (`82…`/`91…` prefix) with no network call — shared
 with `extract_data`, which routes bronze keys the same way — and
 `parse_house_index` parses the annual index ZIP's XML into routed entries,
 also with no network call — both are unit-tested directly. `collect_house`
-orchestrates the full run: fetch the index, then for each entry rate-limit
-(`RateLimiter`, ~1 request/second by default) before fetching the filing and
-running it through `bronze_write`. All network and S3 access is injected as
-plain callables, so `collect_house` itself is tested against fakes with no
-live network call and no MinIO; only `house_collect/handler.py` wires it to
-real `urllib` fetches and a real `boto3` S3 client.
+orchestrates the full run: fetch the index, then for each entry check
+whether its `doc_id` already has a stored sha256 — if so, it's `skip`ped
+with **no fetch at all**, since a House Clerk correction is filed under a
+brand-new `DocID` rather than silently replacing an existing one's content
+(high-confidence primary-source finding, not an absolute guarantee — see
+`docs/research/house-ptr-amendment-doc-id-behavior.md`). Only a never-seen
+`doc_id` is rate-limited (`RateLimiter`, ~1 request/second by default),
+fetched, and run through `bronze_write` (which will always plan a `"write"`
+for it, having nothing to hash-compare against). All network and S3 access
+is injected as plain callables, so `collect_house` itself is tested against
+fakes with no live network call and no MinIO; only `house_collect/handler.py`
+wires it to real `urllib` fetches and a real `boto3` S3 client.
 
 ## Senate collector
 
@@ -104,25 +110,32 @@ entry's year from its `filed_date` column since the response isn't scoped to
 one year. `/paper/` (scanned-GIF, pre-electronic-mandate) and every other
 report kind the search surfaces (`annual`, `extension-notice/regular`, ...)
 are skipped and never fetched, out of scope per the map (#30). `collect_senate`
-then rate-limits (`RateLimiter`, ~1 request/second by default) and fetches
-each `/ptr/` filing's HTML by its Senate eFD UUID, running it through
-`bronze_write` exactly as `collect_house` does; a filing's UUID and an
-amendment's own, separate UUID are used as `doc_id` unchanged, so the
-existing idempotency contract applies without modification. Network and
-storage access are fully injected so `collect_senate` itself is tested
-against fakes with no live network call and no MinIO; only
-`senate_collect/handler.py` wires it to real `urllib` fetches and a
-real `boto3` S3 client — which only succeeds where the Akamai check passes
-(a plain `urllib` request does not; see above).
+calls `known_doc_ids()` once to get every filing UUID already on record,
+then for each entry checks membership *before* touching the network: a
+known UUID (a filing's UUID, or an amendment's own, separate UUID) is
+skipped with no fetch and no rate-limit charged, exactly like
+`collect_house` does for a known House `doc_id` — same ADR-0018 policy, but
+unlike House, not backed by primary-source research confirming Senate
+amendments really do get a separate UUID (see `collect_senate`'s docstring
+for the caveat). Only a never-seen UUID is rate-limited (`RateLimiter`, ~1
+request/second by default), fetched by its Senate eFD UUID, and run through
+`bronze_write` exactly as `collect_house` does. Network and storage access
+are fully injected so `collect_senate` itself is tested against fakes with
+no live network call and no MinIO; only `senate_collect/handler.py` wires it
+to real `urllib` fetches and a real `boto3` S3 client — which only succeeds
+where the Akamai check passes (a plain `urllib` request does not; see
+above).
 
 `src/senate_collect_automated/browser_session.py` (#67) is the automated
 alternative #28 resolved on: `run_senate_efd_session` drives one
 authenticated Playwright session through the entire flow itself — warm-up,
 agreement gate, PTR search form for a 7-day lookback window, then reuses
 `shared.senate_index`'s `parse_senate_index`/`bronze_write`/`RateLimiter`
-exactly as above — instead of a human capturing the DataTables response by
-hand first. It classifies every response it depends on (reaching the search
-form, the search response itself, each filing fetch) via
+exactly as above, skipping a known filing UUID with **no page navigation at
+all** (same `known_doc_ids()`-first policy as `collect_senate`, ADR-0018) —
+instead of a human capturing the DataTables response by hand first. It
+classifies every response it depends on (reaching the search form, the
+search response itself, each filing fetch it actually makes) via
 `shared.senate_efd_classification.classify_probe_result`/its own
 `classify_search_response` (the former moved permanently from
 `senate_akamai_probe/probe.py`, #29's throwaway probe) and raises
@@ -137,12 +150,9 @@ depend on a browser fingerprint signal, not network origin at all (#68, see
 that flow: unlike `senate_collect/handler.py`, it takes no
 `event["response"]` capture — the browser session drives the search itself —
 so `event` is unused, and it wires `run_senate_efd_session` to a real
-`boto3` S3 client the same way every other handler does. It never enqueues
-an SQS message either, for the same reason `senate_collect/handler.py`
-doesn't (Senate has no schedule to chain from, per #18): an S3 event
-notification on the bronze bucket forwards whatever it writes onto
-extract's own SQS queue instead (ADR-0015), the same path House's own
-messages take.
+`boto3` S3 client the same way every other handler does. It enqueues its own
+`extract_queue_message` per bronze key it wrote this run, exactly like
+`senate_collect/handler.py` and `house_collect/handler.py` (ADR-0016).
 
 `docker/senate_collect_automated.Dockerfile` packages it like
 `docker/senate_akamai_probe.Dockerfile` (#29) rather than the plain
@@ -171,30 +181,28 @@ result.
 
 ## Orchestration: SQS chain and stage-to-stage handoff (#43)
 
-Per the shape #18 settled and refined by ADR-0015, stages are chained via
-SQS carrying only S3-key references (never document bytes):
-`shared/orchestration.py`'s `bronze_key_records_from_event` is the one place
-a handler unpacks its event, dispatching on shape — a plain
-`{"bronze_key": ...}` invocation (manual/RIE testing, every handler still
-accepts this), an SQS event (each record's `body` is either
-`extract_queue_message`'s JSON, `{"bronze_key": ...}` — House's own
-messages — or a forwarded S3 event notification, `{"Records": [...]}` — the
-Senate side, whose bronze writes land in S3 first and get forwarded onto
-extract's own SQS queue rather than invoking it directly, ADR-0015), or a
-direct S3 event (each record's own `s3.object.key`, kept for any future
-stage still invoked that way). Every bronze key extracted off an SQS record
-carries that record's `messageId`, whether the record's own body was
-House's shape or a forwarded S3 notification — both have a real SQS message
-behind them, so both get a retry/DLQ handle — while a plain or direct-S3
-record gets `None`, so a handler can report a per-message failure without
+Per the shape #18 settled and ADR-0016 finished generalizing, stages are
+chained via SQS carrying only S3-key references (never document bytes):
+every collector (`house_collect`, `senate_collect`, `senate_collect_automated`)
+builds its own `extract_queue_message` and sends it to extract's queue for
+each bronze key it wrote. `shared/orchestration.py`'s
+`bronze_key_records_from_event` is the one place a handler unpacks its
+event, dispatching on shape — a plain `{"bronze_key": ...}` invocation
+(manual/RIE testing, every handler still accepts this), an SQS event (each
+record's `body` is `extract_queue_message`'s JSON, `{"bronze_key": ...}`),
+or a direct S3 event (each record's own `s3.object.key`, kept for any
+future stage still invoked that way, though nothing produces one today).
+Every bronze key extracted off an SQS record carries that record's
+`messageId`, giving it a retry/DLQ handle, while a plain or direct-S3 record
+gets `None`, so a handler can report a per-message failure without
 re-deriving which records came off SQS itself, even in a batch that mixes
-sources or where one SQS record yields more than one bronze key.
+sources.
 `keys.py`'s `parse_bronze_key` reverses `bronze_key()` back into
 `chamber`/`year`/`doc_id`, shared by every stage that only receives a
 bronze key.
 
 `house_collect/handler.py` enqueues one SQS message per bronze key
-`collect_house` actually wrote this run (never a `noop` key) to
+`collect_house` actually wrote this run (never a `skipped` key) to
 `EXTRACT_QUEUE_URL`, left unset by default so the handler still runs
 standalone with no queue configured. `extract_data/handler.py` accepts a
 batch of SQS records (batch size 1 in production, per #43) and reports a

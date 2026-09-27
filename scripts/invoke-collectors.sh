@@ -10,9 +10,10 @@
 #   scripts/invoke-collectors.sh all [year]     invoke both, one after another
 #
 # Requires: aws CLI, terraform — already authenticated against the target
-# AWS account. Reads the Bronze bucket name from `terraform output` in
-# infra/, so infra/backend.hcl must already be configured. Region defaults
-# to us-east-1 (matching infra/variables.tf); override with AWS_REGION.
+# AWS account. Reads the project bucket name from `terraform output` in
+# infra/ (bronze/silver are key prefixes inside it, not separate buckets),
+# so infra/backend.hcl must already be configured. Region defaults to
+# us-east-1 (matching infra/variables.tf); override with AWS_REGION.
 set -euo pipefail
 
 # The AWS CLI v2 pages every command's stdout through `less` by default on
@@ -48,7 +49,7 @@ esac
 require aws
 require terraform
 
-bronze_bucket="$(tf output -raw bronze_bucket_name)"
+bucket_name="$(tf output -raw bucket_name)"
 
 show_result() {
   local out_file="$1"
@@ -70,7 +71,7 @@ tail_logs() {
 list_bronze() {
   local prefix="$1"
   echo "==> recent Bronze objects under $prefix"
-  aws s3api list-objects-v2 --bucket "$bronze_bucket" --prefix "$prefix" \
+  aws s3api list-objects-v2 --bucket "$bucket_name" --prefix "$prefix" \
     --region "$region" --query 'reverse(sort_by(Contents, &LastModified))[:10].[Key,LastModified]' \
     --output table 2>/dev/null || echo "(no objects yet, or prefix doesn't exist)"
 }
@@ -82,13 +83,14 @@ invoke_house() {
   out_file="$(mktemp)"
   trap 'rm -f "$out_file"' RETURN
 
-  echo "==> invoking $function_name (year=$year)"
+  echo "==> invoking $function_name (year=$year; a full-year backfill can run close to its 900s Lambda timeout)"
   local invoke_status
   invoke_status="$(aws lambda invoke \
     --function-name "$function_name" \
     --region "$region" \
     --payload "{\"year\": ${year}}" \
     --cli-binary-format raw-in-base64-out \
+    --cli-read-timeout 0 \
     "$out_file")"
 
   show_result "$out_file" "$invoke_status"
@@ -107,6 +109,7 @@ invoke_senate() {
   invoke_status="$(aws lambda invoke \
     --function-name "$function_name" \
     --region "$region" \
+    --cli-read-timeout 0 \
     "$out_file")"
 
   show_result "$out_file" "$invoke_status"

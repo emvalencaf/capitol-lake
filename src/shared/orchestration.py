@@ -3,21 +3,19 @@
 Per the orchestration shape settled in #18, stages are chained via SQS
 carrying only S3-key references, never inline document bytes: a queue
 message is `{"bronze_key": ...}`, built by `extract_queue_message` and sent
-by an upstream handler (`house_collect/handler`). The Senate side has no
-scheduled collector (#18); once its bronze objects land in S3 (manually or
-via `senate_collect/handler`), an S3 event notification on the bronze bucket
-forwards onto that same SQS queue (ADR-0015) rather than invoking the
-downstream Lambda directly — this gives Senate-triggered messages the same
-retry/DLQ handling House's own messages already got, at the cost of the SQS
-record's `body` sometimes being a raw S3 event notification (itself a
-`{"Records": [...]}` document) instead of `{"bronze_key": ...}`.
-`bronze_key_records_from_event` unpacks whichever of three shapes a stage's
+by every upstream collector's own handler (`house_collect`, `senate_collect`,
+`senate_collect_automated` — ADR-0016). Senate previously had no scheduled
+collector of its own SQS-sending code and instead relied on an S3 event
+notification on the bronze bucket forwarding onto extract's queue
+(ADR-0015); that bridge is gone now that every collector enqueues its own
+writes directly, so an SQS record's `body` is always `{"bronze_key": ...}`.
+`bronze_key_records_from_event` unpacks whichever of two shapes a stage's
 handler receives: a plain `{"bronze_key": ...}` invocation (manual/local/RIE
-testing, matching every other handler's existing convention), an SQS event
-(one or more records, each either House's own message shape or an
-S3-notification-via-SQS envelope), or a direct S3 event (kept for any future
-stage that still gets invoked that way) — kept here rather than duplicated
-in every downstream handler.
+testing, matching every other handler's existing convention), or an SQS
+event (one or more records, each `{"bronze_key": ...}`) — kept here rather
+than duplicated in every downstream handler. A direct S3 event
+(`eventSource == "aws:s3"`) is still supported for any future stage invoked
+that way, though nothing in this stack produces one today.
 """
 
 from __future__ import annotations
@@ -35,14 +33,12 @@ class BronzeKeyRecord(NamedTuple):
     """One bronze key off an invocation's event, plus its retry handle.
 
     `message_id` is the SQS record's `messageId` when the key came off an
-    SQS event — whether the record's own body is House's `{"bronze_key":
-    ...}` shape or a forwarded S3 event notification, both cases have a real
-    SQS message behind them, so both get a retry/DLQ handle (a handler's own
-    `batchItemFailures` entry, on that record's failure, per #43's
-    per-message DLQ posture and ADR-0015) — or `None` otherwise: a plain
-    invocation or a direct S3 event has no SQS message to retry/DLQ, so a
-    handler must never report a batch-item failure for one of those, even in
-    a batch that mixes sources.
+    SQS event — a real SQS message behind it means a retry/DLQ handle (a
+    handler's own `batchItemFailures` entry, on that record's failure, per
+    #43's per-message DLQ posture) — or `None` otherwise: a plain invocation
+    or a direct S3 event has no SQS message to retry/DLQ, so a handler must
+    never report a batch-item failure for one of those, even in a batch that
+    mixes sources.
     """
 
     bronze_key: str
@@ -55,16 +51,6 @@ def _bronze_key_records_from_sqs(record: dict) -> list[BronzeKeyRecord]:
 
     if "bronze_key" in body:
         return [BronzeKeyRecord(body["bronze_key"], message_id)]
-    if "Records" in body:
-        # S3 delivered its event notification through this SQS queue instead
-        # of invoking the stage directly (ADR-0015, e.g. Senate's bronze
-        # writes) — every nested S3 record shares this outer SQS record's
-        # retry/DLQ handle, since a redelivery of this one message is what a
-        # failure here would actually retry.
-        return [
-            BronzeKeyRecord(unquote_plus(nested["s3"]["object"]["key"]), message_id)
-            for nested in body["Records"]
-        ]
     raise UnrecognizedEventShapeError(f"unrecognized SQS message body shape: {sorted(body)}")
 
 
@@ -80,16 +66,14 @@ def bronze_key_records_from_event(event: dict) -> list[BronzeKeyRecord]:
 
     Dispatches on shape: a plain `{"bronze_key": ...}` invocation yields
     that one key with no `message_id`; an event with `Records` unpacks each
-    record by its `eventSource` — an SQS record's body is either House's own
-    `{"bronze_key": ...}` shape or a forwarded S3 notification (both keyed
-    with that record's `messageId`, see `_bronze_key_records_from_sqs`), a
-    direct S3 record is its own `s3.object.key` (URL-decoded since S3 event
-    keys are `application/x-www-form-urlencoded`) with no `message_id` — a
-    batch can mix record sources, and one SQS record can now yield more than
-    one bronze key, both of which a handler's failure reporting must handle
-    safely (see `BronzeKeyRecord`). Raises `UnrecognizedEventShapeError` for
-    anything else, rather than silently skipping a record a future event
-    source doesn't yet match.
+    record by its `eventSource` — an SQS record's body is `{"bronze_key":
+    ...}` (keyed with that record's `messageId`, see
+    `_bronze_key_records_from_sqs`), a direct S3 record is its own
+    `s3.object.key` (URL-decoded since S3 event keys are
+    `application/x-www-form-urlencoded`) with no `message_id` — a batch can
+    mix record sources (see `BronzeKeyRecord`). Raises
+    `UnrecognizedEventShapeError` for anything else, rather than silently
+    skipping a record a future event source doesn't yet match.
     """
     if "bronze_key" in event:
         return [BronzeKeyRecord(event["bronze_key"], None)]

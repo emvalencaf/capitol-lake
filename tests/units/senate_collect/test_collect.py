@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from senate_collect.collect import collect_senate
+from shared.keys import parse_bronze_key
 from shared.senate_index import RateLimiter, senate_filing_url
 
 FIXTURES = Path(__file__).parent.parent.parent / "fixtures"
@@ -20,11 +21,9 @@ class FakeStore:
     def __init__(self):
         self.objects: dict[str, bytes] = {}
 
-    def read_existing_sha256(self, meta_key: str) -> str | None:
-        raw = self.objects.get(meta_key)
-        if raw is None:
-            return None
-        return json.loads(raw)["sha256"]
+    def known_doc_ids(self) -> set[str]:
+        """Stand-in for a `list_objects_v2` listing: every doc_id already stored."""
+        return {parse_bronze_key(key).doc_id for key in self.objects}
 
     def write_bytes(self, key: str, data: bytes) -> None:
         self.objects[key] = data
@@ -65,7 +64,7 @@ def test_collect_senate_writes_a_real_recorded_ptr_filing_byte_for_byte():
                 senate_filing_url("fda235b3-bad7-4637-8fa1-053f354d929c"): b"<html>ptr two</html>",
             }
         ),
-        read_existing_sha256=store.read_existing_sha256,
+        known_doc_ids=store.known_doc_ids,
         write_bytes=store.write_bytes,
         now=lambda: "2026-09-23T00:00:00Z",
         rate_limiter=_no_sleep_rate_limiter(),
@@ -95,7 +94,7 @@ def test_collect_senate_writes_new_ptr_filings_with_correct_keys_and_metadata():
     result = collect_senate(
         response,
         fetch_filing=_fetch_filing_from(bodies),
-        read_existing_sha256=store.read_existing_sha256,
+        known_doc_ids=store.known_doc_ids,
         write_bytes=store.write_bytes,
         now=lambda: "2026-09-23T00:00:00Z",
         rate_limiter=_no_sleep_rate_limiter(),
@@ -104,7 +103,7 @@ def test_collect_senate_writes_new_ptr_filings_with_correct_keys_and_metadata():
     key_1 = f"bronze/senate/year=2026/{id_1}.html"
     key_2 = f"bronze/senate/year=2026/{id_2}.html"
 
-    assert result == {"years": [2026], "written": [key_1, key_2], "noop": []}
+    assert result == {"years": [2026], "written": [key_1, key_2], "skipped": []}
     assert store.objects[key_1] == bodies[senate_filing_url(id_1)]
 
     meta = json.loads(store.objects[key_1 + ".meta.json"])
@@ -129,7 +128,7 @@ def test_collect_senate_never_fetches_non_ptr_filings():
     collect_senate(
         response,
         fetch_filing=_fetch,
-        read_existing_sha256=store.read_existing_sha256,
+        known_doc_ids=store.known_doc_ids,
         write_bytes=store.write_bytes,
         now=lambda: "2026-09-23T00:00:00Z",
         rate_limiter=_no_sleep_rate_limiter(),
@@ -141,7 +140,7 @@ def test_collect_senate_never_fetches_non_ptr_filings():
     ]
 
 
-def test_collect_senate_is_idempotent_on_unchanged_source():
+def test_collect_senate_skips_known_filing_ids_on_a_second_run_with_no_fetch_or_rate_limit():
     response = _load_sample()
     id_1 = "b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f"
     id_2 = "fda235b3-bad7-4637-8fa1-053f354d929c"
@@ -150,24 +149,42 @@ def test_collect_senate_is_idempotent_on_unchanged_source():
         senate_filing_url(id_2): b"<html>ptr filing two</html>",
     }
     store = FakeStore()
+    fetch_calls = []
+
+    def _fetch_filing(url: str) -> bytes:
+        fetch_calls.append(url)
+        return bodies[url]
 
     kwargs = dict(
-        fetch_filing=_fetch_filing_from(bodies),
-        read_existing_sha256=store.read_existing_sha256,
+        fetch_filing=_fetch_filing,
+        known_doc_ids=store.known_doc_ids,
         write_bytes=store.write_bytes,
         now=lambda: "2026-09-23T00:00:00Z",
     )
 
     collect_senate(response, rate_limiter=_no_sleep_rate_limiter(), **kwargs)
     objects_after_first_run = dict(store.objects)
+    assert sorted(fetch_calls) == sorted(bodies)
 
-    result = collect_senate(response, rate_limiter=_no_sleep_rate_limiter(), **kwargs)
+    class _RateLimiterSpy:
+        def __init__(self):
+            self.wait_calls = 0
+
+        def wait(self) -> None:
+            self.wait_calls += 1
+
+    rate_limiter_spy = _RateLimiterSpy()
+    result = collect_senate(response, rate_limiter=rate_limiter_spy, **kwargs)
 
     assert result["written"] == []
-    assert sorted(result["noop"]) == sorted(
+    assert sorted(result["skipped"]) == sorted(
         [f"bronze/senate/year=2026/{id_1}.html", f"bronze/senate/year=2026/{id_2}.html"]
     )
     assert store.objects == objects_after_first_run
+    # Still just the two fetches from the first run — a known filing UUID is
+    # never re-fetched to hash-compare it (ADR-0018).
+    assert sorted(fetch_calls) == sorted(bodies)
+    assert rate_limiter_spy.wait_calls == 0
 
 
 def test_collect_senate_rate_limits_between_filing_fetches():
@@ -185,10 +202,68 @@ def test_collect_senate_rate_limits_between_filing_fetches():
     collect_senate(
         response,
         fetch_filing=_fetch_filing_from(bodies),
-        read_existing_sha256=store.read_existing_sha256,
+        known_doc_ids=store.known_doc_ids,
         write_bytes=store.write_bytes,
         now=lambda: "2026-09-23T00:00:00Z",
         rate_limiter=limiter,
     )
 
     assert sleeps == [pytest.approx(1.0)]
+
+
+def test_collect_senate_reports_progress_per_entry_when_given_a_callback():
+    response = _load_sample()
+    id_1 = "b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f"
+    id_2 = "fda235b3-bad7-4637-8fa1-053f354d929c"
+    bodies = {
+        senate_filing_url(id_1): b"one",
+        senate_filing_url(id_2): b"two",
+    }
+    store = FakeStore()
+    progress_events = []
+
+    collect_senate(
+        response,
+        fetch_filing=_fetch_filing_from(bodies),
+        known_doc_ids=store.known_doc_ids,
+        write_bytes=store.write_bytes,
+        now=lambda: "2026-09-23T00:00:00Z",
+        rate_limiter=_no_sleep_rate_limiter(),
+        on_progress=progress_events.append,
+    )
+
+    assert progress_events == [
+        {"index": 1, "total": 2, "doc_id": id_1, "action": "write"},
+        {"index": 2, "total": 2, "doc_id": id_2, "action": "write"},
+    ]
+
+
+def test_collect_senate_reports_skip_action_for_a_known_filing_id():
+    response = _load_sample()
+    id_1 = "b999bc0e-3eb0-4ca9-ab07-8e8f2e04b41f"
+    id_2 = "fda235b3-bad7-4637-8fa1-053f354d929c"
+    bodies = {
+        senate_filing_url(id_1): b"one",
+        senate_filing_url(id_2): b"two",
+    }
+    store = FakeStore()
+    kwargs = dict(
+        fetch_filing=_fetch_filing_from(bodies),
+        known_doc_ids=store.known_doc_ids,
+        write_bytes=store.write_bytes,
+        now=lambda: "2026-09-23T00:00:00Z",
+    )
+    collect_senate(response, rate_limiter=_no_sleep_rate_limiter(), **kwargs)
+
+    progress_events = []
+    collect_senate(
+        response,
+        rate_limiter=_no_sleep_rate_limiter(),
+        on_progress=progress_events.append,
+        **kwargs,
+    )
+
+    assert progress_events == [
+        {"index": 1, "total": 2, "doc_id": id_1, "action": "skip"},
+        {"index": 2, "total": 2, "doc_id": id_2, "action": "skip"},
+    ]

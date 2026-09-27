@@ -44,6 +44,7 @@ resource "aws_ecr_repository" "this" {
 
   name                 = "${var.ecr_repo_prefix}-${each.value}"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
@@ -86,7 +87,7 @@ data "aws_iam_policy_document" "collect_s3" {
   statement {
     sid       = "BronzeReadWrite"
     actions   = ["s3:GetObject", "s3:PutObject"]
-    resources = ["${var.bronze_bucket_arn}/*"]
+    resources = ["${var.bucket_arn}/bronze/*"]
   }
 
   # Each collector's idempotent-skip check (read_existing_sha256) GetObjects
@@ -94,11 +95,18 @@ data "aws_iam_policy_document" "collect_s3" {
   # Without s3:ListBucket on the bucket itself, S3 can't tell the caller
   # apart from someone probing for the key's existence, so it returns 403
   # AccessDenied instead of 404 NoSuchKey — this statement is what lets a
-  # missing key actually come back as "not found".
+  # missing key actually come back as "not found". Scoped to the bronze/
+  # prefix via a condition since the bucket is now shared with silver.
   statement {
     sid       = "BronzeList"
     actions   = ["s3:ListBucket"]
-    resources = [var.bronze_bucket_arn]
+    resources = [var.bucket_arn]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["bronze/*"]
+    }
   }
 }
 
@@ -106,13 +114,13 @@ data "aws_iam_policy_document" "extract_s3" {
   statement {
     sid       = "BronzeRead"
     actions   = ["s3:GetObject"]
-    resources = ["${var.bronze_bucket_arn}/*"]
+    resources = ["${var.bucket_arn}/bronze/*"]
   }
 
   statement {
     sid       = "SilverWrite"
     actions   = ["s3:PutObject"]
-    resources = ["${var.silver_bucket_arn}/*"]
+    resources = ["${var.bucket_arn}/silver/*"]
   }
 }
 
@@ -185,8 +193,8 @@ module "extract" {
   queue_visibility_timeout_seconds = 300
 
   environment_variables = {
-    BRONZE_BUCKET              = var.bronze_bucket_name
-    SILVER_BUCKET              = var.silver_bucket_name
+    BRONZE_BUCKET              = var.bucket_name
+    SILVER_BUCKET              = var.bucket_name
     LLM_FALLBACK_PROVIDER      = var.llm_fallback_provider
     OPENFIGI_API_KEY_SSM_PARAM = aws_ssm_parameter.secret["openfigi-api-key"].name
     GEMINI_API_KEY_SSM_PARAM   = aws_ssm_parameter.secret["gemini-api-key"].name
@@ -229,7 +237,7 @@ module "house_collect" {
   reserved_concurrent_executions = var.stage_reserved_concurrency
 
   environment_variables = {
-    BRONZE_BUCKET     = var.bronze_bucket_name
+    BRONZE_BUCKET     = var.bucket_name
     EXTRACT_QUEUE_URL = module.extract.queue_url
   }
 
@@ -257,15 +265,31 @@ module "senate_collect" {
   name        = "senate-collect"
   image_uri   = "${aws_ecr_repository.this["senate-collect"].repository_url}:latest"
   role_arn    = aws_iam_role.this["senate-collect"].arn
-  sqs_trigger = false # manual/local invocation only (#18); no schedule, no queue
+  sqs_trigger = false # manual/local invocation only (#18); no schedule, no queue of its own
 
   reserved_concurrent_executions = var.stage_reserved_concurrency
 
   environment_variables = {
-    BRONZE_BUCKET = var.bronze_bucket_name
+    BRONZE_BUCKET     = var.bucket_name
+    EXTRACT_QUEUE_URL = module.extract.queue_url
   }
 
   tags = local.stage_tags["senate-collect"]
+}
+
+resource "aws_iam_role_policy" "senate_collect_sqs" {
+  name = "sqs-send-to-extract"
+  role = aws_iam_role.this["senate-collect"].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "SendToExtractQueue"
+      Effect   = "Allow"
+      Action   = "sqs:SendMessage"
+      Resource = module.extract.queue_arn
+    }]
+  })
 }
 
 module "senate_collect_automated" {
@@ -274,7 +298,7 @@ module "senate_collect_automated" {
   name        = "senate-collect-automated"
   image_uri   = "${aws_ecr_repository.this["senate-collect-automated"].repository_url}:latest"
   role_arn    = aws_iam_role.this["senate-collect-automated"].arn
-  sqs_trigger = false # EventBridge-scheduled (infra/modules/scheduling); the bronze S3 event already chains into extract regardless of which Senate path wrote the object (#69)
+  sqs_trigger = false # EventBridge-scheduled (infra/modules/scheduling); enqueues its own writes onto extract's queue directly (ADR-0016), same as house-collect
 
   # Sized for a real Chromium session driving #67's eFD search-and-fetch
   # flow, not the stdlib-only stages above: 2048MB, and a timeout at
@@ -285,8 +309,24 @@ module "senate_collect_automated" {
   reserved_concurrent_executions = var.stage_reserved_concurrency
 
   environment_variables = {
-    BRONZE_BUCKET = var.bronze_bucket_name
+    BRONZE_BUCKET     = var.bucket_name
+    EXTRACT_QUEUE_URL = module.extract.queue_url
   }
 
   tags = local.stage_tags["senate-collect-automated"]
+}
+
+resource "aws_iam_role_policy" "senate_collect_automated_sqs" {
+  name = "sqs-send-to-extract"
+  role = aws_iam_role.this["senate-collect-automated"].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "SendToExtractQueue"
+      Effect   = "Allow"
+      Action   = "sqs:SendMessage"
+      Resource = module.extract.queue_arn
+    }]
+  })
 }

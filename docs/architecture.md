@@ -32,10 +32,18 @@ two diagrams referenced from the acceptance criteria.
 ### 1. Collect (Bronze)
 
 **House.** A scheduled Lambda, triggered daily by EventBridge, lists that
-year's House PTR filings and downloads any Filing not already in Bronze
-(`house_collect.py`). Each Filing is written to S3 byte-for-byte — Bronze
-never edits or re-encodes what it collects. A successful write enqueues the
-new bronze key onto the extract stage's SQS queue.
+year's House PTR filings and, for each one, checks a `doc_id` against a
+`known_doc_ids` set built from a single paginated `s3:ListObjectsV2` over
+that year's Bronze prefix (one listing call per run, not one `GetObject`
+per entry). A `doc_id` already on record is skipped with no fetch at all —
+no HTTP call, no rate-limit wait, no re-hash — on primary-source evidence
+that a House PTR correction always gets its own new DocID rather than
+silently overwriting an existing one's content (ADR
+[0017](adr/0017-house-collect-skips-refetch-of-known-doc-ids.md),
+[0018](adr/0018-known-doc-ids-via-s3-listing-and-senate-skips-refetch-too.md)).
+Only a never-seen `doc_id` gets fetched and written to S3 byte-for-byte —
+Bronze never edits or re-encodes what it collects. A successful write
+enqueues the new bronze key onto the extract stage's SQS queue.
 
 **Senate.** The Senate's eFD search UI is protected against bot and
 fingerprint-based traffic, and a sandboxed request from a cloud egress IP
@@ -43,9 +51,20 @@ hits the same block a script would — so the Senate collector runs two ways:
 an automated Lambda that drives the search through a real headless browser
 session, and a manual fallback (a human runs the same flow locally and
 uploads the result) for whenever the automated path doesn't clear the
-block. Both paths write to the same Bronze bucket; there is no EventBridge
-schedule for Senate, so a bronze write is what triggers the next stage
-(directly, via an S3 event notification), not an SQS enqueue.
+block. Both paths write to the same Bronze bucket and, like House, skip a
+known filing UUID with no fetch (also via a one-time `s3:ListObjectsV2`
+listing, ADR-0018) — but that skip rests on this repo's own unverified
+assumption that a Senate eFD amendment always gets a separate UUID, not on
+primary-source research the way House's does. There is no EventBridge
+schedule for Senate, but each path's own handler enqueues the new bronze
+key onto extract's SQS queue itself, exactly like House.
+
+Every collector handler (House and both Senate paths) and the extract
+handler emit one structured JSON "wide event" log line per invocation —
+identity, timing, outcome, and business counts (written/enqueued/skipped) —
+plus a `log_progress()` line per item processed, so CloudWatch shows
+activity throughout a run instead of looking hung until a Lambda's 900s
+timeout (`src/shared/wide_event.py`).
 
 Every Lambda in the pipeline, House and Senate collectors included, ships
 as a container image from ECR rather than a zip/layers bundle — see
@@ -127,16 +146,19 @@ extractor itself.
 ## System architecture
 
 The diagram below covers the AWS services involved: EventBridge triggers
-the collector Lambdas on a schedule, House and Senate both land in the same
-S3 Bronze bucket, the extract Lambda picks up new keys from SQS (House) or
-an S3 event notification (Senate) and writes to S3 Silver, every Lambda's
-image comes from ECR, GitHub Actions deploys the Terraform stack through an
-OIDC-federated IAM role (never long-lived AWS keys), and a tag-filtered AWS
-Budget publishes spend alerts through SNS.
+the collector Lambdas on a schedule, House and Senate both land in the
+bronze/ prefix of one shared S3 bucket (bronze and silver used to be
+separate buckets; `infra/modules/storage` collapsed them into prefixes of a
+single project bucket), every collector enqueues its own written keys onto
+the extract Lambda's SQS queue (ADR-0016), which extract picks up and
+writes to the bucket's silver/ prefix, every Lambda's image comes from ECR,
+GitHub Actions deploys the Terraform stack through an OIDC-federated IAM
+role (never long-lived AWS keys), and a tag-filtered AWS Budget publishes
+spend alerts through SNS.
 
-![System architecture: EventBridge-scheduled Lambdas write filings to S3
-Bronze; an extract Lambda reads from SQS or an S3 event and writes to S3
-Silver, alongside ECR, IAM/OIDC and SNS budget
+![System architecture: EventBridge-scheduled Lambdas write filings to one
+S3 bucket's bronze/ prefix; an extract Lambda reads from SQS and writes to
+the same bucket's silver/ prefix, alongside ECR, IAM/OIDC and SNS budget
 alerting](diagrams/assets/architecture-system.svg)
 
 See [ADR 0009](adr/0009-terraform-module-structure-and-cicd.md) for the

@@ -1,9 +1,6 @@
-output "bronze_bucket_name" {
-  value = module.storage.bronze_bucket_name
-}
-
-output "silver_bucket_name" {
-  value = module.storage.silver_bucket_name
+output "bucket_name" {
+  description = "Single project S3 bucket name; bronze/silver are key prefixes inside it."
+  value       = module.storage.bucket_name
 }
 
 output "ecr_repository_urls" {

@@ -1,16 +1,9 @@
-variable "bronze_bucket_name" {
-  type = string
+variable "bucket_name" {
+  description = "Single project S3 bucket name; bronze and silver are key prefixes inside it (modules/storage)."
+  type        = string
 }
 
-variable "bronze_bucket_arn" {
-  type = string
-}
-
-variable "silver_bucket_name" {
-  type = string
-}
-
-variable "silver_bucket_arn" {
+variable "bucket_arn" {
   type = string
 }
 

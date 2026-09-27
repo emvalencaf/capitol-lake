@@ -13,15 +13,22 @@ confirmed to clear it. Handlers stay thin by convention: they only translate
 the event shape and real clients into the pure function's arguments and are
 not unit-tested (see docs/local-dev.md); the pure function underneath is.
 
-Unlike `house_collect/handler.py`, this handler never enqueues an SQS
-message itself: per #18/#43's orchestration shape, House builds its own
-`extract_queue_message` because it's the one scheduled, automated collector,
-but Senate has no schedule to chain from. Once this handler's `write_bytes`
-lands a bronze object in S3 (whether invoked as a real Lambda or run
-locally), an S3 event notification on the bronze bucket (infra, not code)
-forwards that object onto extract's own SQS queue — the same path a human's
-manual upload takes, and the same queue/DLQ semantics House's own messages
-get (see `shared.orchestration`'s SQS-wrapped-S3-event handling, #18).
+Like `house_collect/handler.py`, this handler enqueues one SQS message
+(`orchestration.extract_queue_message`, an S3-key reference only, never
+document bytes) per bronze key `collect_senate` actually wrote this run —
+never for a `skipped` key. Previously this stage relied on an S3 event
+notification on the bronze bucket to forward its writes onto extract's own
+SQS queue instead (ADR-0015); that indirection is gone (ADR-0016) — this
+handler now owns enqueuing exactly like every other collector.
+`EXTRACT_QUEUE_URL` is the extract stage's queue; left unset, this stage
+still writes bronze but chains nothing further, which keeps the handler
+runnable standalone (e.g. against MinIO with no queue configured) exactly
+like every other stage here.
+
+`_known_doc_ids` lists the whole `bronze/senate/` prefix (every year, not
+just one) since a captured search response can span a year boundary
+(`collect_senate`'s own `years` output can hold more than one) — cheap here
+since Senate's corpus is much smaller than House's (ADR-0018).
 """
 
 import json
@@ -32,9 +39,13 @@ from urllib.request import Request, urlopen
 import boto3
 
 from senate_collect.collect import collect_senate
+from shared.keys import UnrecognizedBronzeKeyError, parse_bronze_key
+from shared.orchestration import extract_queue_message
+from shared.wide_event import log_progress, wide_event
 
 USER_AGENT = "capitol-lake collector (contact: edsonmvf@gmail.com)"
 BRONZE_BUCKET = os.environ.get("BRONZE_BUCKET", "bronze")
+EXTRACT_QUEUE_URL = os.environ.get("EXTRACT_QUEUE_URL")
 
 
 def _fetch(url: str) -> bytes:
@@ -43,25 +54,49 @@ def _fetch(url: str) -> bytes:
         return response.read()
 
 
-def _read_existing_sha256(s3_client, meta_key: str) -> str | None:
-    try:
-        obj = s3_client.get_object(Bucket=BRONZE_BUCKET, Key=meta_key)
-    except s3_client.exceptions.NoSuchKey:
-        return None
-    return json.loads(obj["Body"].read())["sha256"]
+def _known_doc_ids(s3_client) -> set[str]:
+    doc_ids: set[str] = set()
+    paginator = s3_client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=BRONZE_BUCKET, Prefix="bronze/senate/"):
+        for obj in page.get("Contents", []):
+            try:
+                doc_ids.add(parse_bronze_key(obj["Key"]).doc_id)
+            except UnrecognizedBronzeKeyError:
+                continue
+    return doc_ids
 
 
 def _write_bytes(s3_client, key: str, data: bytes) -> None:
     s3_client.put_object(Bucket=BRONZE_BUCKET, Key=key, Body=data)
 
 
-def handler(event: dict, context: object) -> dict:
-    s3_client = boto3.client("s3", endpoint_url=os.environ.get("AWS_ENDPOINT_URL_S3"))
+def _enqueue_written_filings(sqs_client, written: list[str]) -> None:
+    for bronze_key in written:
+        sqs_client.send_message(
+            QueueUrl=EXTRACT_QUEUE_URL,
+            MessageBody=json.dumps(extract_queue_message(bronze_key)),
+        )
 
-    return collect_senate(
-        event["response"],
-        fetch_filing=_fetch,
-        read_existing_sha256=lambda meta_key: _read_existing_sha256(s3_client, meta_key),
-        write_bytes=lambda key, data: _write_bytes(s3_client, key, data),
-        now=lambda: datetime.now(UTC).isoformat(),
-    )
+
+def handler(event: dict, context: object) -> dict:
+    with wide_event("senate_collect", context) as log:
+        s3_client = boto3.client("s3", endpoint_url=os.environ.get("AWS_ENDPOINT_URL_S3"))
+
+        result = collect_senate(
+            event["response"],
+            fetch_filing=_fetch,
+            known_doc_ids=lambda: _known_doc_ids(s3_client),
+            write_bytes=lambda key, data: _write_bytes(s3_client, key, data),
+            now=lambda: datetime.now(UTC).isoformat(),
+            on_progress=lambda progress: log_progress("senate_collect", context, **progress),
+        )
+        log["years"] = result["years"]
+        log["written_count"] = len(result["written"])
+        log["skipped_count"] = len(result["skipped"])
+
+        if EXTRACT_QUEUE_URL:
+            sqs_client = boto3.client("sqs", endpoint_url=os.environ.get("AWS_ENDPOINT_URL_SQS"))
+            _enqueue_written_filings(sqs_client, result["written"])
+            log["enqueued_count"] = len(result["written"])
+
+        return result

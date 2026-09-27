@@ -29,8 +29,114 @@ heading when `development` is released to `master`.
   bucket name aren't credentials on their own, but they're not meant to be
   world-readable log output either). `infra/README.md`'s setup instructions
   updated to match.
+- `infra/modules/storage`: collapsed the separate bronze/silver S3 buckets
+  into a single project bucket, with bronze/silver as key prefixes
+  (`bronze/...`/`silver/...`, already how `shared/keys.py` builds keys, so no
+  Lambda code changed). `modules/pipeline`'s IAM policies now scope
+  `BronzeReadWrite`/`BronzeList`/`SilverWrite` to the matching prefix instead
+  of a whole separate bucket. `modules/pipeline`'s ECR repositories also gained
+  `force_delete = true` (matching `probes/senate-akamai-probe`), so
+  `terraform destroy` no longer fails with `RepositoryNotEmptyException` on a
+  repo still holding pushed images.
+- `src/shared/wide_event.py`: added a wide-event (canonical log line) logger,
+  `.claude/skills/logging-best-practices`. Every real pipeline handler
+  (`house_collect`, `senate_collect`, `senate_collect_automated`,
+  `extract_data`) now wraps its body in `wide_event(stage, context)`, which
+  emits exactly one JSON log line per invocation with the Lambda's identity
+  (`function_name`/`function_version`/`aws_request_id`/region), timing, and
+  outcome, plus whatever business fields the handler adds (counts written/
+  enqueued/processed, `noop`, per-record failures for `extract`'s SQS batch
+  path). No commit hash yet — nothing currently tags a deployed image with
+  one; a follow-up could add that via CI. `senate_akamai_probe` and `stub`
+  are intentionally left out: the former is a throwaway hand-invoked probe,
+  the latter isn't wired into `infra` at all.
+- `collect_house`/`collect_senate`/`run_senate_efd_session`: an optional
+  `on_progress` callback, called after every entry with `{"index", "total",
+  "doc_id", "action"}` (`action` straight from `bronze_write`'s own plan:
+  `"write"` or `"noop"`). Wired through each handler into
+  `shared/wide_event.py`'s new `log_progress()`, which emits one JSON log
+  line immediately per entry — unlike `wide_event`'s single end-of-run
+  summary, so CloudWatch shows activity throughout a run that can approach
+  the Lambda's 900s timeout instead of looking hung until the very end. The
+  pure collect functions stay side-effect-free and unit-tested; only the
+  handler decides the callback becomes a log line.
+- `extract_data/handler.py`: `_process_one` now reports `llm_fallback_used`
+  (whether `_build_llm_fallback`'s gates actually let the LLM fallback run
+  for that filing) and the batch-processing loops (`batch_no_sqs`,
+  `sqs_batch`) emit a `log_progress()` line per record — including a
+  `failed`/`error` line for a caught per-record exception before it becomes
+  a `batchItemFailures` entry — mirroring the visibility the collectors
+  already had, since `extract` can run just as long per batch (OCR, ticker
+  resolution, LLM fallback network calls).
+- `senate_collect`/`senate_collect_automated`: both now enqueue their own
+  `extract_queue_message` per bronze key written, exactly like
+  `house_collect` (ADR-0016, supersedes ADR-0015). Removes
+  `infra/modules/scheduling`'s bronze-bucket-to-SQS bridge
+  (`aws_s3_bucket_notification`, `aws_sqs_queue_policy`, and the variables
+  that only existed to wire it: `bucket_id`, `bucket_arn`,
+  `extract_queue_arn`, `extract_queue_url`, `senate_bronze_prefix`,
+  `senate_bronze_suffix`) and the nested S3-notification-via-SQS envelope
+  `shared/orchestration.py` had to unwrap — an SQS record's body is always
+  `{"bronze_key": ...}` now. Each Senate collector's IAM role gained its own
+  `sqs:SendMessage` policy scoped to extract's queue (mirroring
+  `house_collect_sqs`). Also fixed `house_collect`/`senate_collect`'s wide
+  event logging the full `noop` key list instead of a `noop_count` (an
+  inconsistency introduced alongside the wide-event work above), and added
+  `docs/research/house-ptr-amendment-doc-id-behavior.md`: primary-source
+  research (House Clerk PTR form/instructions, the live annual index) found,
+  with high confidence, that a House PTR correction always gets its own new
+  DocID rather than silently replacing an existing one's content — context
+  for why `collect_house`'s hash-compare re-fetch is a defensive, not yet
+  empirically-required, safeguard.
+- `collect_house`: acting on that research, a `doc_id` already on record is
+  now skipped with **no fetch at all** — no HTTP call, no
+  `rate_limiter.wait()`, no re-hash — instead of being re-downloaded every
+  run just to confirm its hash is unchanged (ADR-0017). Only a never-seen
+  `doc_id` gets fetched and written. `collect_house`'s return dict's `noop`
+  key is renamed `skipped` (there's no hash comparison happening to call a
+  no-op any more), `on_progress`'s `action` is `"skip"` instead of
+  `"noop"`, and `house_collect/handler.py`'s wide-event field is
+  `skipped_count`. Scoped to House only; Senate's two collectors still
+  hash-compare on every run.
+- `collect_house`/`collect_senate`/`run_senate_efd_session`: replaced the
+  per-entry `read_existing_sha256` (one `s3:GetObject` per index entry, just
+  to test existence) with a `known_doc_ids: Callable[[], set[str]]` called
+  once per run — each handler implements it as a single paginated
+  `s3:ListObjectsV2` over the relevant bronze prefix, parsed through
+  `shared.keys.parse_bronze_key` into a `set` (ADR-0018). House's listing is
+  scoped to the run's own year (`bronze/house/year=<year>/`); both Senate
+  collectors list the whole `bronze/senate/` prefix, since a captured
+  response or lookback window can span a year boundary.
+- **Senate now skips a known filing UUID too**, exactly like House
+  (ADR-0018): `collect_senate` and `run_senate_efd_session` (the latter also
+  skipping the browser page navigation and Akamai classification for it,
+  not just the write) both trust a known UUID as immutable, with no fetch
+  and no rate-limit charged. Unlike House, this is **not** backed by
+  primary-source research — it rests on this repo's own pre-existing,
+  unverified assumption that a Senate eFD amendment always gets a separate
+  UUID. `SenateEfdSessionResult.noop` renamed `.skipped`;
+  `senate_collect`/`senate_collect_automated`'s wide-event fields are
+  `skipped_count`.
+- `docs/architecture.md`, `docs/diagrams/`: updated the Collect stage
+  description and re-rendered `architecture-system.svg` to match the two
+  changes above — the known-`doc_id`/UUID skip (ADR-0017/0018) and the
+  wide-event/per-item-progress logging (`src/shared/wide_event.py`) — and
+  fixed the system diagram, which still showed separate Bronze/Silver S3
+  buckets and a Senate-only S3-event trigger; both are now one bucket with
+  `bronze/`/`silver/` prefixes and every collector enqueues onto SQS
+  directly (ADR-0016).
+
 ### Fixed
 
+- `docker/extract-requirements.txt`: missing `beautifulsoup4`/`lxml`, so
+  `extract`'s Lambda failed cold start with `Runtime.ImportModuleError:
+  No module named 'bs4'` (`extract_data/extract.py` imports
+  `extract_data/senate_extract.py`, which parses Senate HTML filings via
+  `BeautifulSoup(..., "lxml")`, ADR-0013). This file mirrors
+  `pyproject.toml`'s runtime deps by hand for the non-AWS base image
+  (`docker/extract.Dockerfile`'s Tesseract requirement) and drifted out of
+  sync when Senate HTML extraction was added. Verified by building the
+  image and importing `extract_data.handler` inside it.
 - `infra`/`shared/orchestration.py`: Senate's bronze-to-extract chain
   invoked `extract`'s Lambda directly off an S3 event notification, with no
   SQS message behind it — unlike House, which chains over extract's own SQS

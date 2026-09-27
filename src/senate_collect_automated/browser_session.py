@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from shared.bronze_write import bronze_write
-from shared.keys import bronze_key, bronze_meta_key
+from shared.keys import bronze_key
 from shared.senate_efd_classification import (
     LAMBDA_SAFE_CHROMIUM_LAUNCH_ARGS,
     ResponseOutcome,
@@ -131,19 +131,20 @@ class SenateEfdSessionResult:
 
     years: list[int]
     written: list[str]
-    noop: list[str]
+    skipped: list[str]
     filings_available: int
     filings_processed: int
 
 
 def run_senate_efd_session(
     *,
-    read_existing_sha256: Callable[[str], str | None],
+    known_doc_ids: Callable[[], set[str]],
     write_bytes: Callable[[str, bytes], None],
     now: Callable[[], str],
     today: Callable[[], date] = date.today,
     rate_limiter: RateLimiter | None = None,
     max_filings: int = MAX_FILINGS_PER_RUN,
+    on_progress: Callable[[dict], None] | None = None,
 ) -> SenateEfdSessionResult:
     """Drive one authenticated Playwright session through the full Senate eFD PTR flow.
 
@@ -160,11 +161,23 @@ def run_senate_efd_session(
     Raises `SenateEfdBlockedError` immediately on the first response (the
     search page's own load, or any filing fetch) that classifies as
     anything but `"cleared"`; filings already written to bronze before that
-    stay written. Storage access is injected (`read_existing_sha256`,
-    `write_bytes`, `now`) the same way `collect_senate` injects it, but the
-    browser session itself is not — driving a real Playwright browser
-    against the live site isn't unit-tested, only exercised by hand, the
-    same convention `senate_akamai_probe.probe.run_probe` follows.
+    stay written. `known_doc_ids()` is called once, before the fetch loop,
+    to get every filing UUID already on record; an entry whose UUID is
+    already known is skipped with **no page navigation at all** — no
+    fetch, no rate-limit charged, no Akamai classification needed for it
+    (ADR-0018, same policy `collect_house`/`collect_senate` apply — *not*
+    backed by primary-source research for Senate specifically; see
+    `collect_senate`'s docstring for the caveat). Storage access is injected
+    (`known_doc_ids`, `write_bytes`, `now`) the same way `collect_senate`
+    injects it, but the browser session itself is not — driving a real
+    Playwright browser against the live site isn't unit-tested, only
+    exercised by hand, the same convention `senate_akamai_probe.probe.run_probe`
+    follows.
+
+    `on_progress`, if given, is called after every entry with `{"index": i,
+    "total": len(entries_to_fetch), "doc_id": ..., "action": "write" |
+    "skip"}` (1-based `index`, `doc_id` here is the filing's UUID) — a hook
+    for the handler to surface progress on a run that can take minutes.
     """
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
     from playwright.sync_api import sync_playwright
@@ -233,59 +246,67 @@ def run_senate_efd_session(
 
             entries: list[SenateIndexEntry] = parse_senate_index(json.loads(search_body))
             entries_to_fetch = filings_to_fetch(entries, max_filings)
+            total = len(entries_to_fetch)
+            existing_doc_ids = known_doc_ids()
 
             written: list[str] = []
-            noop: list[str] = []
-            for entry in entries_to_fetch:
-                rate_limiter.wait()
+            skipped: list[str] = []
+            for index, entry in enumerate(entries_to_fetch, start=1):
+                if entry.filing_id in existing_doc_ids:
+                    skipped.append(bronze_key("senate", entry.year, entry.filing_id, "html"))
+                    action = "skip"
+                else:
+                    rate_limiter.wait()
 
-                url = senate_filing_url(entry.filing_id)
-                filing_response = page.goto(url, wait_until="networkidle")
-                status_code = filing_response.status if filing_response is not None else 0
-                html = page.content()
+                    url = senate_filing_url(entry.filing_id)
+                    filing_response = page.goto(url, wait_until="networkidle")
+                    status_code = filing_response.status if filing_response is not None else 0
+                    html = page.content()
 
-                outcome = classify_probe_result(status_code, html)
-                if outcome != "cleared":
-                    raise SenateEfdBlockedError(
-                        context=f"fetching filing {entry.filing_id}",
-                        outcome=outcome,
-                        status_code=status_code,
-                        final_url=page.url,
+                    outcome = classify_probe_result(status_code, html)
+                    if outcome != "cleared":
+                        raise SenateEfdBlockedError(
+                            context=f"fetching filing {entry.filing_id}",
+                            outcome=outcome,
+                            status_code=status_code,
+                            final_url=page.url,
+                        )
+
+                    candidate_bytes = html.encode("utf-8")
+                    plan = bronze_write(
+                        chamber="senate",
+                        year=entry.year,
+                        doc_id=entry.filing_id,
+                        ext="html",
+                        candidate_bytes=candidate_bytes,
+                        existing_sha256=None,
+                        source_url=url,
+                        fetched_at=now(),
+                        index_row=entry.index_row,
                     )
 
-                candidate_bytes = html.encode("utf-8")
-                meta_key = bronze_meta_key(
-                    bronze_key("senate", entry.year, entry.filing_id, "html")
-                )
-                existing_sha256 = read_existing_sha256(meta_key)
+                    meta = {**plan["meta"], "kind": entry.kind}
+                    write_bytes(plan["key"], candidate_bytes)
+                    write_bytes(plan["meta_key"], json.dumps(meta).encode("utf-8"))
+                    written.append(plan["key"])
+                    action = "write"
 
-                plan = bronze_write(
-                    chamber="senate",
-                    year=entry.year,
-                    doc_id=entry.filing_id,
-                    ext="html",
-                    candidate_bytes=candidate_bytes,
-                    existing_sha256=existing_sha256,
-                    source_url=url,
-                    fetched_at=now(),
-                    index_row=entry.index_row,
-                )
-
-                if plan["action"] == "noop":
-                    noop.append(plan["key"])
-                    continue
-
-                meta = {**plan["meta"], "kind": entry.kind}
-                write_bytes(plan["key"], candidate_bytes)
-                write_bytes(plan["meta_key"], json.dumps(meta).encode("utf-8"))
-                written.append(plan["key"])
+                if on_progress is not None:
+                    on_progress(
+                        {
+                            "index": index,
+                            "total": total,
+                            "doc_id": entry.filing_id,
+                            "action": action,
+                        }
+                    )
         finally:
             browser.close()
 
     return SenateEfdSessionResult(
         years=sorted({e.year for e in entries_to_fetch}),
         written=written,
-        noop=noop,
+        skipped=skipped,
         filings_available=len(entries),
         filings_processed=len(entries_to_fetch),
     )

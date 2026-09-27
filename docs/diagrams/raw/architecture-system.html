@@ -62,10 +62,11 @@
          aria-labelledby="arch-system-title arch-system-desc">
       <title id="arch-system-title">Capitol Lake system architecture</title>
       <desc id="arch-system-desc">EventBridge schedules trigger the House and Senate collector
-        Lambdas, which write to an S3 bronze bucket; the extract Lambda picks up new filings via
-        SQS or an S3 event and writes structured Parquet to an S3 silver bucket. ECR supplies
-        every Lambda's container image, IAM/OIDC lets GitHub Actions deploy the stack, and a
-        tag-filtered AWS Budget publishes spend alerts through SNS.</desc>
+        Lambdas, which write to the bronze/ prefix of one shared S3 bucket and enqueue their own
+        SQS message; the extract Lambda polls that queue and writes structured Parquet to the
+        bucket's silver/ prefix. ECR supplies every Lambda's container image, IAM/OIDC lets
+        GitHub Actions deploy the stack, and a tag-filtered AWS Budget publishes spend alerts
+        through SNS.</desc>
       <defs>
         <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="0.9" fill="rgba(22,25,31,0.10)"/>
@@ -167,13 +168,7 @@
       <rect x="890" y="152" width="44" height="12" rx="2" fill="#faf9f6"/>
       <text x="912" y="161" fill="#ff9900" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">ROWS</text>
 
-      <!-- 6. S3 Bronze -> Extract Lambda (S3 event, Senate path) -->
-      <path d="M 452,140 V 108 Q 452,100 460,100 H 806 Q 814,100 814,108 V 140"
-            fill="none" stroke="#545b64" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
-      <rect x="605" y="82" width="56" height="12" rx="2" fill="#faf9f6"/>
-      <text x="633" y="91" fill="#545b64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">S3 EVENT</text>
-
-      <!-- 7. ECR -> Extract Lambda (image pull) -->
+      <!-- 6. ECR -> Extract Lambda (image pull) -->
       <path d="M 494,332 V 258 Q 494,250 502,250 H 806 Q 814,250 814,258 V 204"
             fill="none" stroke="#545b64" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
       <rect x="634" y="230" width="40" height="12" rx="2" fill="#faf9f6"/>
@@ -204,7 +199,7 @@
       <text x="412" y="157" fill="#545b64" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">S3</text>
       <use href="#icon-bucket" x="488" y="148" width="16" height="16" color="#545b64"/>
       <text x="452" y="176" fill="#16191f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">S3 Bronze</text>
-      <text x="452" y="192" fill="#545b64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">raw filings</text>
+      <text x="452" y="192" fill="#545b64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">bronze/ prefix</text>
 
       <!-- Node: SQS extract queue -->
       <rect x="568" y="140" width="120" height="64" rx="6" fill="#faf9f6"/>
@@ -231,7 +226,7 @@
       <text x="960" y="157" fill="#545b64" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">S3</text>
       <use href="#icon-bucket" x="1036" y="148" width="16" height="16" color="#545b64"/>
       <text x="1000" y="176" fill="#16191f" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">S3 Silver</text>
-      <text x="1000" y="192" fill="#545b64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">filings + txns</text>
+      <text x="1000" y="192" fill="#545b64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">silver/ prefix</text>
 
       <!-- Node: ECR (ops zone) -->
       <rect x="434" y="332" width="120" height="64" rx="6" fill="#faf9f6"/>
@@ -268,7 +263,7 @@
       <text x="60" y="492" fill="#545b64" font-size="8.5" font-family="'Geist', sans-serif">Focal — extract Lambda</text>
 
       <rect x="260" y="484" width="14" height="10" rx="2" fill="rgba(22,25,31,0.05)" stroke="#545b64" stroke-width="1"/>
-      <text x="280" y="492" fill="#545b64" font-size="8.5" font-family="'Geist', sans-serif">S3 store</text>
+      <text x="280" y="492" fill="#545b64" font-size="8.5" font-family="'Geist', sans-serif">S3 store (one bucket, bronze/silver prefixes)</text>
 
       <rect x="380" y="484" width="14" height="10" rx="2" fill="rgba(22,25,31,0.02)" stroke="rgba(22,25,31,0.20)" stroke-width="0.8" stroke-dasharray="4,3"/>
       <text x="400" y="492" fill="#545b64" font-size="8.5" font-family="'Geist', sans-serif">Ops / platform, outside data path</text>

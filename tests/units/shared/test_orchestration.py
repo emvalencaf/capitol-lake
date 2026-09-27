@@ -132,77 +132,32 @@ def test_bronze_key_records_from_a_mixed_batch_only_carry_the_sqs_records_messag
     ]
 
 
-def _s3_notification_body(*keys: str) -> str:
-    return json.dumps(
-        {"Records": [{"eventSource": "aws:s3", "s3": {"object": {"key": key}}} for key in keys]}
-    )
-
-
-def test_bronze_keys_from_s3_notification_forwarded_via_sqs():
-    """S3's own notification, delivered through SQS instead of a direct invoke (ADR-0015)."""
+def test_bronze_keys_from_sqs_rejects_forwarded_s3_notification_shape():
+    """ADR-0015's S3-notification-via-SQS envelope is gone (ADR-0016): every
+    collector enqueues its own `{"bronze_key": ...}` message directly now,
+    so a nested `{"Records": [...]}` body is no longer a recognized shape.
+    """
     event = {
         "Records": [
             {
                 "messageId": "msg-1",
                 "eventSource": "aws:sqs",
-                "body": _s3_notification_body("bronze/senate/year=2024/abc123.html"),
-            }
-        ]
-    }
-
-    assert bronze_keys_from_event(event) == ["bronze/senate/year=2024/abc123.html"]
-
-
-def test_bronze_key_records_from_sqs_forwarded_s3_notification_get_the_outer_message_id():
-    """The whole point of ADR-0015: a forwarded S3 record now has a real retry/DLQ handle."""
-    event = {
-        "Records": [
-            {
-                "messageId": "msg-1",
-                "eventSource": "aws:sqs",
-                "body": _s3_notification_body("bronze/senate/year=2024/abc123.html"),
-            }
-        ]
-    }
-
-    assert bronze_key_records_from_event(event) == [
-        BronzeKeyRecord("bronze/senate/year=2024/abc123.html", "msg-1")
-    ]
-
-
-def test_bronze_key_records_from_sqs_forwarded_s3_notification_with_multiple_nested_records():
-    """One SQS message can carry more than one S3 record; all share that message's id."""
-    event = {
-        "Records": [
-            {
-                "messageId": "msg-1",
-                "eventSource": "aws:sqs",
-                "body": _s3_notification_body(
-                    "bronze/senate/year=2024/abc123.html",
-                    "bronze/senate/year=2024/def456.html",
+                "body": json.dumps(
+                    {
+                        "Records": [
+                            {
+                                "eventSource": "aws:s3",
+                                "s3": {"object": {"key": "bronze/senate/year=2024/abc123.html"}},
+                            }
+                        ]
+                    }
                 ),
             }
         ]
     }
 
-    assert bronze_key_records_from_event(event) == [
-        BronzeKeyRecord("bronze/senate/year=2024/abc123.html", "msg-1"),
-        BronzeKeyRecord("bronze/senate/year=2024/def456.html", "msg-1"),
-    ]
-
-
-def test_bronze_keys_from_sqs_forwarded_s3_notification_unquotes_the_object_key():
-    event = {
-        "Records": [
-            {
-                "messageId": "msg-1",
-                "eventSource": "aws:sqs",
-                "body": _s3_notification_body("bronze/senate/year=2024/a1b2%2Bc3.html"),
-            }
-        ]
-    }
-
-    assert bronze_keys_from_event(event) == ["bronze/senate/year=2024/a1b2+c3.html"]
+    with pytest.raises(UnrecognizedEventShapeError):
+        bronze_keys_from_event(event)
 
 
 def test_bronze_keys_from_sqs_rejects_unrecognized_message_body_shape():
