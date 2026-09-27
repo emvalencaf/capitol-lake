@@ -15,6 +15,27 @@
 #   isn't part of this stack, same reasoning as the Billing Console
 #   cost-allocation tag step in ../README.md) — GitHub sets
 #   `sub = repo:<repo>:environment:<name>` for those.
+#
+# This repo has "immutable subject claims" enabled (GitHub Settings > Actions
+# > General > OIDC customization; `gh api repos/<repo>/actions/oidc/customization/sub`
+# shows `use_immutable_subject: true`) — it's the account-recommended default,
+# closing the hijack window where deleting/renaming a repo and recreating one
+# with the same owner/name would otherwise inherit any trust policy scoped by
+# name alone. With it on, GitHub's `sub` embeds each side's numeric,
+# never-reused id: `repo:<owner>@<owner_id>/<repo>@<repo_id>:pull_request`
+# instead of the classic `repo:<owner>/<repo>:pull_request`. `local.sub_*`
+# below wildcards past those ids (StringLike, not StringEquals) so this trust
+# policy matches either form without hardcoding this AWS account's specific
+# owner/repo id pair — those ids aren't a Terraform input anywhere else, and
+# baking them in would silently start failing if GitHub ever rotates them.
+locals {
+  github_repository_parts = split("/", var.github_repository)
+  github_owner            = local.github_repository_parts[0]
+  github_repo_name        = local.github_repository_parts[1]
+  sub_pull_request        = "repo:${local.github_owner}*/${local.github_repo_name}*:pull_request"
+  sub_environment         = "repo:${local.github_owner}*/${local.github_repo_name}*:environment:${var.github_environment}"
+}
+
 data "tls_certificate" "github_actions" {
   url = "https://token.actions.githubusercontent.com/.well-known/openid-configuration"
 }
@@ -47,8 +68,8 @@ data "aws_iam_policy_document" "github_actions_assume_role" {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        "repo:${var.github_repository}:pull_request",
-        "repo:${var.github_repository}:environment:${var.github_environment}",
+        local.sub_pull_request,
+        local.sub_environment,
       ]
     }
   }
@@ -88,6 +109,7 @@ data "aws_iam_policy_document" "github_actions_terraform" {
     actions = [
       "s3:CreateBucket",
       "s3:DeleteBucket",
+      "s3:GetBucketAcl",
       "s3:GetObject",
       "s3:PutObject",
       "s3:DeleteObject",
@@ -105,10 +127,28 @@ data "aws_iam_policy_document" "github_actions_terraform" {
       "s3:GetBucketNotification",
       "s3:PutBucketNotification",
       "s3:GetBucketLocation",
+      # aws_s3_bucket's read (refresh) also fetches every one of these
+      # deprecated/computed legacy attributes regardless of whether they're
+      # set, even though modules/storage doesn't configure any of them —
+      # AWS provider v5 backward-compat behavior for the all-in-one
+      # aws_s3_bucket resource, not this stack's own design.
+      "s3:GetBucketCORS",
+      "s3:GetBucketLogging",
+      "s3:GetBucketWebsite",
+      "s3:GetBucketRequestPayment",
+      "s3:GetLifecycleConfiguration",
+      "s3:GetReplicationConfiguration",
+      "s3:GetAccelerateConfiguration",
+      "s3:GetBucketObjectLockConfiguration",
     ]
+    # var.bucket_prefix's default (modules/storage's aws_s3_bucket.this) is
+    # the bare name "capitol-lake" (bronze/silver unified into key prefixes
+    # inside it, #18) — no trailing "-*" the "capitol-lake-*" pattern this
+    # used to require needs to match against. Bare wildcard instead, so it
+    # covers that bucket and any future "capitol-lake*"-named one.
     resources = [
-      "arn:aws:s3:::capitol-lake-*",
-      "arn:aws:s3:::capitol-lake-*/*",
+      "arn:aws:s3:::capitol-lake*",
+      "arn:aws:s3:::capitol-lake*/*",
     ]
   }
 
@@ -154,6 +194,7 @@ data "aws_iam_policy_document" "github_actions_terraform" {
       "lambda:CreateFunction",
       "lambda:DeleteFunction",
       "lambda:GetFunction",
+      "lambda:ListVersionsByFunction",
       "lambda:UpdateFunctionCode",
       "lambda:UpdateFunctionConfiguration",
       "lambda:PutFunctionConcurrency",
@@ -165,11 +206,6 @@ data "aws_iam_policy_document" "github_actions_terraform" {
       "lambda:TagResource",
       "lambda:UntagResource",
       "lambda:ListTags",
-      "lambda:CreateEventSourceMapping",
-      "lambda:GetEventSourceMapping",
-      "lambda:UpdateEventSourceMapping",
-      "lambda:DeleteEventSourceMapping",
-      "lambda:ListEventSourceMappings",
     ]
     resources = ["arn:aws:lambda:*:*:function:capitol-lake-*"]
   }
@@ -193,8 +229,12 @@ data "aws_iam_policy_document" "github_actions_terraform" {
     ]
   }
 
+  # Covers both EventBridge schedules modules/scheduling/main.tf creates
+  # (capitol-lake-house-collect-schedule, capitol-lake-senate-collect-
+  # automated-schedule) — a single "*-schedule" pattern rather than one
+  # entry per rule, since they're both this stack's only rule type.
   statement {
-    sid = "HouseSchedule"
+    sid = "PipelineSchedules"
     actions = [
       "events:PutRule",
       "events:DeleteRule",
@@ -206,7 +246,24 @@ data "aws_iam_policy_document" "github_actions_terraform" {
       "events:TagResource",
       "events:UntagResource",
     ]
-    resources = ["arn:aws:events:*:*:rule/capitol-lake-house-collect-schedule"]
+    resources = ["arn:aws:events:*:*:rule/capitol-lake-*-schedule"]
+  }
+
+  # aws_lambda_event_source_mapping resources (modules/lambda-stage) get a
+  # GitHub-assigned UUID, not a "capitol-lake"-prefixed name, so unlike every
+  # other statement here this can't be scoped by name — same reasoning as
+  # SecretsDescribe below for ssm:DescribeParameters.
+  statement {
+    sid = "LambdaEventSourceMappings"
+    actions = [
+      "lambda:CreateEventSourceMapping",
+      "lambda:GetEventSourceMapping",
+      "lambda:UpdateEventSourceMapping",
+      "lambda:DeleteEventSourceMapping",
+      "lambda:ListEventSourceMappings",
+      "lambda:ListTags",
+    ]
+    resources = ["arn:aws:lambda:*:*:event-source-mapping:*"]
   }
 
   statement {
@@ -217,7 +274,6 @@ data "aws_iam_policy_document" "github_actions_terraform" {
       "sns:GetTopicAttributes",
       "sns:SetTopicAttributes",
       "sns:Subscribe",
-      "sns:Unsubscribe",
       "sns:ListSubscriptionsByTopic",
       "sns:ListTagsForResource",
       "sns:TagResource",
@@ -226,17 +282,41 @@ data "aws_iam_policy_document" "github_actions_terraform" {
     resources = ["arn:aws:sns:*:*:capitol-lake-budget-alerts"]
   }
 
+  # aws_sns_topic_subscription's own actions (refresh's GetSubscriptionAttributes,
+  # and Unsubscribe on destroy/replace) take a subscription ARN as the API
+  # parameter, but AWS evaluates identity-policy resource matching against
+  # the *topic* ARN (confirmed via CloudTrail/simulate-principal-policy —
+  # the AccessDenied message's "on resource" already truncates to the topic
+  # ARN, no subscription-id suffix). Both forms listed since that's
+  # undocumented behavior this policy shouldn't depend on staying exactly
+  # this way.
+  statement {
+    sid = "FinopsAlertsSubscription"
+    actions = [
+      "sns:GetSubscriptionAttributes",
+      "sns:Unsubscribe",
+    ]
+    resources = [
+      "arn:aws:sns:*:*:capitol-lake-budget-alerts",
+      "arn:aws:sns:*:*:capitol-lake-budget-alerts:*",
+    ]
+  }
+
   statement {
     sid = "FinopsBudget"
     actions = [
       "budgets:ViewBudget",
       "budgets:ModifyBudget",
+      "budgets:ListTagsForResource",
     ]
     resources = ["arn:aws:budgets::*:budget/capitol-lake-monthly"]
   }
 
+  # Covers both alarms modules/finops/main.tf creates (capitol-lake-pipeline-
+  # staleness, capitol-lake-senate-collect-automated-errors, #69) under one
+  # "capitol-lake-*" pattern rather than one entry per alarm.
   statement {
-    sid = "FinopsStalenessAlarm"
+    sid = "FinopsAlarms"
     actions = [
       "cloudwatch:PutMetricAlarm",
       "cloudwatch:DeleteAlarms",
@@ -245,13 +325,23 @@ data "aws_iam_policy_document" "github_actions_terraform" {
       "cloudwatch:TagResource",
       "cloudwatch:UntagResource",
     ]
-    resources = ["arn:aws:cloudwatch:*:*:alarm:capitol-lake-pipeline-staleness"]
+    resources = ["arn:aws:cloudwatch:*:*:alarm:capitol-lake-*"]
   }
 
   statement {
     sid       = "Secrets"
     actions   = ["ssm:GetParameter", "ssm:PutParameter", "ssm:DeleteParameter", "ssm:AddTagsToResource", "ssm:RemoveTagsFromResource", "ssm:ListTagsForResource"]
     resources = ["arn:aws:ssm:*:*:parameter/capitol-lake/*"]
+  }
+
+  # ssm:DescribeParameters has no resource-level permissions (AWS requires
+  # "*" for it — the aws_ssm_parameter data/resource's own refresh calls it
+  # to look up each parameter's metadata before the scoped GetParameter
+  # above). Read-only; lists parameter names/metadata, never secret values.
+  statement {
+    sid       = "SecretsDescribe"
+    actions   = ["ssm:DescribeParameters"]
+    resources = ["*"]
   }
 }
 

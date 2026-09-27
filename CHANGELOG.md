@@ -7,6 +7,37 @@ heading when `development` is released to `master`.
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/setup-github-env.sh`: `up`/`down` script that automates
+  `infra/README.md`'s "One-time GitHub setup" step via `gh` — creates or
+  removes the `production` GitHub Environment (with a required-reviewer
+  gate) and the `AWS_ROLE_ARN`/`TF_STATE_BUCKET`/`FINOPS_ALERT_EMAIL` repo
+  secrets `infra-cicd.yml` reads. `down --purge-history` additionally
+  deletes the workflow's run history and the Environment's deployment
+  records.
+
+### Fixed
+
+- `infra/bootstrap/oidc.tf`: the GitHub Actions OIDC trust policy and the
+  `terraform-apply` IAM role's own permissions never actually worked end to
+  end — `infra-cicd.yml`'s `plan`/`apply` jobs 403'd on `AssumeRoleWithWebIdentity`
+  because this repo has "immutable subject claims" enabled
+  (`repo:<owner>@<owner_id>/<repo>@<repo_id>:...` instead of the classic
+  `repo:<owner>/<repo>:...` GitHub `sub` format the trust policy's condition
+  assumed), and once that was fixed, `terraform plan` surfaced a long tail of
+  IAM gaps only exercisable once OIDC actually worked: the main stack's
+  single `capitol-lake` bucket doesn't match the `capitol-lake-*` resource
+  pattern the policy required; the EventBridge/CloudWatch-alarm statements
+  only covered one of the two schedules/alarms `modules/scheduling` and
+  `modules/finops` each create; Lambda event source mappings (UUID-named,
+  not `capitol-lake`-prefixed) had no statement at all; and several read-only
+  actions (`sns:GetSubscriptionAttributes`, `s3:GetBucketAcl`/`GetBucketCORS`/
+  etc., `budgets:ListTagsForResource`, `ssm:DescribeParameters`,
+  `lambda:ListTags` on event source mappings) were missing outright. Verified
+  by rerunning the `plan` job against `chore/setup-github-env-script`'s PR
+  until it passed clean.
+
 ### Changed
 
 - `src/`: split the single `src/capitol_lake` package into `src/shared/`
