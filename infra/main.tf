@@ -13,10 +13,8 @@ module "storage" {
 module "pipeline" {
   source = "./modules/pipeline"
 
-  bronze_bucket_name = module.storage.bronze_bucket_name
-  bronze_bucket_arn  = module.storage.bronze_bucket_arn
-  silver_bucket_name = module.storage.silver_bucket_name
-  silver_bucket_arn  = module.storage.silver_bucket_arn
+  bucket_name = module.storage.bucket_name
+  bucket_arn  = module.storage.bucket_arn
 
   ecr_repo_prefix            = var.ecr_repo_prefix
   llm_fallback_provider      = var.llm_fallback_provider
@@ -35,12 +33,6 @@ module "scheduling" {
   senate_collect_automated_function_name = module.pipeline.senate_collect_automated_function_name
   senate_collect_automated_function_arn  = module.pipeline.senate_collect_automated_function_arn
   senate_automated_schedule_expression   = var.senate_automated_schedule_expression
-
-  extract_queue_arn = module.pipeline.extract_queue_arn
-  extract_queue_url = module.pipeline.extract_queue_url
-
-  bronze_bucket_id  = module.storage.bronze_bucket_id
-  bronze_bucket_arn = module.storage.bronze_bucket_arn
 
   tags = var.common_tags
 }

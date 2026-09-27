@@ -1,23 +1,11 @@
-output "bronze_bucket_id" {
-  value = aws_s3_bucket.bronze.id
+output "bucket_id" {
+  value = aws_s3_bucket.this.id
 }
 
-output "bronze_bucket_name" {
-  value = aws_s3_bucket.bronze.bucket
+output "bucket_name" {
+  value = aws_s3_bucket.this.bucket
 }
 
-output "bronze_bucket_arn" {
-  value = aws_s3_bucket.bronze.arn
-}
-
-output "silver_bucket_id" {
-  value = aws_s3_bucket.silver.id
-}
-
-output "silver_bucket_name" {
-  value = aws_s3_bucket.silver.bucket
-}
-
-output "silver_bucket_arn" {
-  value = aws_s3_bucket.silver.arn
+output "bucket_arn" {
+  value = aws_s3_bucket.this.arn
 }

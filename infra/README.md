@@ -9,13 +9,15 @@ Single environment, no dev/staging (ADR-0009's scoping decision).
   main stack's own backend depends on, plus the GitHub Actions OIDC provider
   and IAM role `.github/workflows/infra-cicd.yml` assumes (#46). Run this
   first, by hand.
-- `modules/storage` — bronze/silver S3 buckets.
+- `modules/storage` — the single project S3 bucket; bronze/silver are key
+  prefixes inside it, not separate buckets.
 - `modules/pipeline` — ECR repositories, IAM roles, SSM secret parameters,
   and the four Lambda stages (`house-collect`, `senate-collect`,
   `senate-collect-automated`, `extract`), each via `modules/lambda-stage`.
 - `modules/scheduling` — House's and the automated Senate collector's
-  EventBridge schedules, plus the manual Senate path's S3-event trigger into
-  `extract`.
+  EventBridge schedules. Every collector (House, and both Senate paths)
+  enqueues its own writes onto extract's SQS queue directly from its handler
+  (ADR-0016), so there's no bridging infra for that here.
 - `modules/finops` — the tag-filtered AWS Budget, House's dead-man's-switch
   staleness alarm, and the automated Senate collector's dedicated Errors
   alarm (ADR-0010, #69), all alerting through one SNS topic.
