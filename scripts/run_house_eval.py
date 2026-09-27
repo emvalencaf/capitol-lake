@@ -14,7 +14,7 @@ Two extractors are available (`--extractor`):
   each filing is extracted twice and the two runs must produce
   byte-identical rows.
 - `llm`: the benchmark-only `extract_llm` (#89), reading transactions
-  directly via a `--provider` (`groq`/`lm_studio`). LLM output isn't
+  directly via a `--provider` (`groq`/`gemini`/`lm_studio`). LLM output isn't
   deterministic, so the determinism check is skipped for it and replaced by
   an optional consistency check (`--llm-runs`, ADR 0019): repeat each
   filing's extraction and report how much the repeats agree with each
@@ -39,6 +39,9 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from dotenv import load_dotenv
+
+load_dotenv()
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -75,11 +78,13 @@ def _tesseract_extractor(pdf_bytes: bytes, *, bronze_key: str) -> Any:
     return _EXTRACTORS[route_doc_id(doc_id)](pdf_bytes, bronze_key=bronze_key)
 
 
+_MODEL_ENV_VAR = {"groq": "GROQ_MODEL", "gemini": "GEMINI_MODEL", "lm_studio": "LM_STUDIO_MODEL"}
+
+
 def _llm_extractor(args: argparse.Namespace) -> Extractor:
     provider_name = args.provider or os.environ.get("LLM_FALLBACK_PROVIDER", "lm_studio")
     if args.model:
-        env_var = "GROQ_MODEL" if provider_name == "groq" else "LM_STUDIO_MODEL"
-        os.environ[env_var] = args.model
+        os.environ[_MODEL_ENV_VAR[provider_name]] = args.model
     provider: Provider = provider_by_name(provider_name)
     return functools.partial(extract_llm, provider=provider, input_mode=args.llm_input)
 
@@ -254,7 +259,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--provider",
-        choices=("groq", "lm_studio"),
+        choices=("groq", "gemini", "lm_studio"),
         default=None,
         help="LLM provider for --extractor llm (default: $LLM_FALLBACK_PROVIDER or lm_studio)",
     )
