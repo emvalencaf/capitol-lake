@@ -7,6 +7,8 @@ heading when `development` is released to `master`.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-27
+
 ### Added
 
 - `LICENSE`: GPL-3.0, ahead of making the repository public.
