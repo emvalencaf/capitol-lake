@@ -5,6 +5,7 @@
 # search-result payload.
 FROM public.ecr.aws/lambda/python:3.12
 
-COPY src/capitol_lake ${LAMBDA_TASK_ROOT}/capitol_lake
+COPY src/shared ${LAMBDA_TASK_ROOT}/shared
+COPY src/senate_collect ${LAMBDA_TASK_ROOT}/senate_collect
 
-CMD ["capitol_lake.handlers.senate_collect_handler.handler"]
+CMD ["senate_collect.handler.handler"]

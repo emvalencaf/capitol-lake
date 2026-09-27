@@ -7,6 +7,7 @@
 # `pip install` layer here; the stub has none.
 FROM public.ecr.aws/lambda/python:3.12
 
-COPY src/capitol_lake ${LAMBDA_TASK_ROOT}/capitol_lake
+COPY src/shared ${LAMBDA_TASK_ROOT}/shared
+COPY src/stub ${LAMBDA_TASK_ROOT}/stub
 
-CMD ["capitol_lake.handlers.stub_handler.handler"]
+CMD ["stub.handler.handler"]

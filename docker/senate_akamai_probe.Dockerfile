@@ -54,9 +54,10 @@ RUN mkdir -p ${LAMBDA_TASK_ROOT} \
     && chmod +x /usr/local/bin/aws-lambda-rie
 
 WORKDIR ${LAMBDA_TASK_ROOT}
-COPY src/capitol_lake ${LAMBDA_TASK_ROOT}/capitol_lake
+COPY src/shared ${LAMBDA_TASK_ROOT}/shared
+COPY src/senate_akamai_probe ${LAMBDA_TASK_ROOT}/senate_akamai_probe
 COPY docker/extract-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["capitol_lake.handlers.senate_akamai_probe_handler.handler"]
+CMD ["senate_akamai_probe.handler.handler"]

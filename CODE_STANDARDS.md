@@ -17,10 +17,17 @@ repeating values.
 - Lint and format: `ruff` (config in `pyproject.toml`), enforced by the `pre-commit` hook.
 - Encoding: UTF-8, NFC-normalized, no BOM, no zero-width or bidi control characters
   (enforced by `scripts/check_unicode.py`).
-- Tests: `pytest` (dev dependency), run with `uv run pytest`; tests live in `tests/`.
+- Tests: `pytest` (dev dependency), run with `uv run pytest`; tests live in
+  `tests/units/` (pure-function/fixture tests, mirroring `src/`'s layout) and
+  `tests/e2e/` (real Lambda/S3/SQS runs, see `tests/e2e/README.md`).
 - Type checker: none.
 - Docstrings: no fixed style; names and tests carry the intent.
-- Directory layout: `src/<package>/` layout.
+- Directory layout: `src/shared/` holds code used by more than one Lambda
+  image; each Lambda gets its own top-level `src/<lambda-name>/` package
+  containing only its own `handler.py` and stage logic. A Lambda's Docker
+  image (`docker/<lambda-name>.Dockerfile` or `docker/lambda.Dockerfile` for
+  the stub template) copies `src/shared/` plus its own package only, never
+  another Lambda's package — see ADR 0014.
 
 ## Documentation
 

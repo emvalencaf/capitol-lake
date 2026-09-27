@@ -4,42 +4,49 @@ How pipeline stages are laid out under `src/`, how the local S3 emulation
 (MinIO) mirrors the AWS key layout, and how to run a stage the same way it
 will run in Lambda.
 
-## `src/` layout: pure function plus thin handler
+## `src/` layout: shared package plus pure function plus thin handler
+
+Per ADR 0014, `src/shared/` holds code used by more than one Lambda image;
+each Lambda gets its own top-level package containing only its own stage
+logic and handler:
 
 ```
-src/capitol_lake/
+src/shared/
 ├── keys.py              # shared S3 key-layout helpers (bronze_key, silver_key)
-├── stages/
-│   └── <stage>.py        # one pure function per pipeline stage
-└── handlers/
-    └── <stage>_handler.py  # thin Lambda adapter for that stage
+└── ...                   # other cross-Lambda code (schema, orchestration, ...)
+src/<lambda-name>/
+├── <stage>.py            # one pure function for that Lambda's stage
+└── handler.py            # thin Lambda adapter for that stage
 ```
 
 Each pipeline stage (collect, extract, ticker/LLM-fallback, silver-write) is
 split in two:
 
-- **`stages/<stage>.py`** — a pure function. It takes an S3 key or raw bytes
-  and returns a plain, structured dict. It never touches S3, SQS, or any
-  other AWS service directly. This is what tests call, and the only thing
-  tests call: no AWS mocking, no MinIO, no LocalStack needed for a
+- **`<lambda-name>/<stage>.py`** — a pure function. It takes an S3 key or
+  raw bytes and returns a plain, structured dict. It never touches S3, SQS,
+  or any other AWS service directly. This is what tests call, and the only
+  thing tests call: no AWS mocking, no MinIO, no LocalStack needed for a
   stage-level unit test.
-- **`handlers/<stage>_handler.py`** — a thin `handler(event, context)`
-  Lambda entry point that unpacks the event, calls the pure function, and
-  returns its result. Handlers stay thin by convention and are not
-  unit-tested; `src/capitol_lake/handlers/stub_handler.py` and
-  `src/capitol_lake/stages/stub.py` are the reference pair new stages copy.
+- **`<lambda-name>/handler.py`** — a thin `handler(event, context)` Lambda
+  entry point that unpacks the event, calls the pure function, and returns
+  its result. Handlers stay thin by convention and are not unit-tested;
+  `src/stub/handler.py` and `src/stub/process.py` are the reference pair
+  new stages copy.
+
+A Lambda's Docker image `COPY`s `src/shared/` plus its own package only —
+never another Lambda's package (ADR 0014).
 
 ## S3 key layout
 
 Local (MinIO) and AWS (S3) use the identical key strings; only the endpoint
-differs. Built by `src/capitol_lake/keys.py`:
+differs. Built by `src/shared/keys.py`:
 
 - Bronze: `bronze/<chamber>/year=<year>/<doc_id>.<ext>`
 - Silver: `silver/<table>/chamber=<chamber>/year=<year>/part-<doc_id>.parquet`
 
 ## Bronze contract: hash-gated idempotent writer
 
-`src/capitol_lake/stages/bronze_write.py` is the chamber-agnostic bronze
+`src/shared/bronze_write.py` is the chamber-agnostic bronze
 contract shared by every collector. Given candidate bytes for a `doc_id` and
 the sha256 already on record for it (or `None` if it has never been
 stored), `bronze_write` decides — without touching S3 or the network — one
@@ -60,21 +67,22 @@ returned plan.
 
 ## House collector
 
-`src/capitol_lake/stages/house_collect.py` is the first caller of the bronze
-contract. `route_doc_id` classifies a House doc id as `"digital"` (`20…`
-prefix) or `"scanned"` (`82…`/`91…` prefix) with no network call, and
+`src/house_collect/collect.py` is the first caller of the bronze contract.
+`shared.doc_id.route_doc_id` classifies a House doc id as `"digital"` (`20…`
+prefix) or `"scanned"` (`82…`/`91…` prefix) with no network call — shared
+with `extract_data`, which routes bronze keys the same way — and
 `parse_house_index` parses the annual index ZIP's XML into routed entries,
 also with no network call — both are unit-tested directly. `collect_house`
 orchestrates the full run: fetch the index, then for each entry rate-limit
 (`RateLimiter`, ~1 request/second by default) before fetching the filing and
 running it through `bronze_write`. All network and S3 access is injected as
 plain callables, so `collect_house` itself is tested against fakes with no
-live network call and no MinIO; only `handlers/house_collect_handler.py`
-wires it to real `urllib` fetches and a real `boto3` S3 client.
+live network call and no MinIO; only `house_collect/handler.py` wires it to
+real `urllib` fetches and a real `boto3` S3 client.
 
 ## Senate collector
 
-`src/capitol_lake/stages/senate_collect.py` is the second caller of the
+`src/senate_collect/collect.py` is the second caller of the
 bronze contract, writing `bronze/senate/year=<year>/<filing_id>.html`. Unlike
 House, it is not scheduled: the Senate eFD search UI is Akamai
 bot/fingerprint-protected (#17, #23) — confirmed live (2026-09-23) even on
@@ -86,7 +94,7 @@ the eFD search, captures the JSON body its own DataTables endpoint
 (`POST /search/report/data/`) returns, and calls `collect_senate(response,
 ...)` (or invokes `senate_collect_handler` with `event["response"]` set to
 that capture) directly, rather than this stage discovering the index itself.
-`route_filing_kind`/`parse_senate_index` route and filter that response's
+`shared.senate_index`'s `route_filing_kind`/`parse_senate_index` route and filter that response's
 rows — `[first, last, office, html_link, filed_date]`, confirmed against a
 real recorded response (`tests/fixtures/senate_search_sample.json`) and a
 real fetched `/ptr/` filing page (`tests/fixtures/senate_ptr_sample.html`,
@@ -103,20 +111,21 @@ amendment's own, separate UUID are used as `doc_id` unchanged, so the
 existing idempotency contract applies without modification. Network and
 storage access are fully injected so `collect_senate` itself is tested
 against fakes with no live network call and no MinIO; only
-`handlers/senate_collect_handler.py` wires it to real `urllib` fetches and a
+`senate_collect/handler.py` wires it to real `urllib` fetches and a
 real `boto3` S3 client — which only succeeds where the Akamai check passes
 (a plain `urllib` request does not; see above).
 
-`src/capitol_lake/browser/senate_efd_session.py` (#67) is the automated
+`src/senate_collect_automated/browser_session.py` (#67) is the automated
 alternative #28 resolved on: `run_senate_efd_session` drives one
 authenticated Playwright session through the entire flow itself — warm-up,
 agreement gate, PTR search form for a 7-day lookback window, then reuses
-`parse_senate_index`/`bronze_write`/`RateLimiter` exactly as above — instead
-of a human capturing the DataTables response by hand first. It classifies
-every response it depends on (reaching the search form, the search response
-itself, each filing fetch) via `classify_probe_result`/
-`classify_search_response` (moved here permanently from
-`probes/senate_akamai_probe.py`, #29's throwaway probe) and raises
+`shared.senate_index`'s `parse_senate_index`/`bronze_write`/`RateLimiter`
+exactly as above — instead of a human capturing the DataTables response by
+hand first. It classifies every response it depends on (reaching the search
+form, the search response itself, each filing fetch) via
+`shared.senate_efd_classification.classify_probe_result`/its own
+`classify_search_response` (the former moved permanently from
+`senate_akamai_probe/probe.py`, #29's throwaway probe) and raises
 immediately on anything but `"cleared"`. Clearing the check turned out to
 depend on a browser fingerprint signal, not network origin at all (#68, see
 `docs/research/senate-efd-session-hand-test.md`'s Update section):
@@ -124,15 +133,16 @@ depend on a browser fingerprint signal, not network origin at all (#68, see
 `browser.new_page()`, stripping the default headless Chromium UA's
 `HeadlessChrome` substring — a real Lambda egress IP is not required.
 
-`handlers/senate_collect_automated_handler.py` (#68) is the thin Lambda
-adapter for that flow: unlike `senate_collect_handler.py`, it takes no
+`senate_collect_automated/handler.py` (#68) is the thin Lambda adapter for
+that flow: unlike `senate_collect/handler.py`, it takes no
 `event["response"]` capture — the browser session drives the search itself —
 so `event` is unused, and it wires `run_senate_efd_session` to a real
 `boto3` S3 client the same way every other handler does. It never enqueues
-an SQS message either, for the same reason `senate_collect_handler.py`
+an SQS message either, for the same reason `senate_collect/handler.py`
 doesn't (Senate has no schedule to chain from, per #18): an S3 event
-notification on the bronze bucket triggers extract directly for whatever it
-writes.
+notification on the bronze bucket forwards whatever it writes onto
+extract's own SQS queue instead (ADR-0015), the same path House's own
+messages take.
 
 `docker/senate_collect_automated.Dockerfile` packages it like
 `docker/senate_akamai_probe.Dockerfile` (#29) rather than the plain
@@ -161,31 +171,38 @@ result.
 
 ## Orchestration: SQS chain and stage-to-stage handoff (#43)
 
-Per the shape #18 settled, stages are chained via SQS carrying only S3-key
-references (never document bytes): `stages/orchestration.py`'s
-`bronze_key_records_from_event` is the one place a handler unpacks its
-event, dispatching on shape — a plain `{"bronze_key": ...}` invocation
-(manual/RIE testing, every handler still accepts this), an SQS event (each
-record's `body` is `extract_queue_message`'s JSON, `{"bronze_key": ...}`),
-or an S3 event (each record's own `s3.object.key`, for the Senate side,
-which has no scheduled collector to send an SQS message on its behalf).
-Each `BronzeKeyRecord` also carries that record's SQS `messageId` (`None`
-for a plain or S3 record) so a handler can report a per-message failure
-without re-deriving which records came off SQS itself, even in a batch that
-mixes sources. `keys.py`'s `parse_bronze_key` reverses `bronze_key()` back
-into `chamber`/`year`/`doc_id`, shared by every stage that only receives a
+Per the shape #18 settled and refined by ADR-0015, stages are chained via
+SQS carrying only S3-key references (never document bytes):
+`shared/orchestration.py`'s `bronze_key_records_from_event` is the one place
+a handler unpacks its event, dispatching on shape — a plain
+`{"bronze_key": ...}` invocation (manual/RIE testing, every handler still
+accepts this), an SQS event (each record's `body` is either
+`extract_queue_message`'s JSON, `{"bronze_key": ...}` — House's own
+messages — or a forwarded S3 event notification, `{"Records": [...]}` — the
+Senate side, whose bronze writes land in S3 first and get forwarded onto
+extract's own SQS queue rather than invoking it directly, ADR-0015), or a
+direct S3 event (each record's own `s3.object.key`, kept for any future
+stage still invoked that way). Every bronze key extracted off an SQS record
+carries that record's `messageId`, whether the record's own body was
+House's shape or a forwarded S3 notification — both have a real SQS message
+behind them, so both get a retry/DLQ handle — while a plain or direct-S3
+record gets `None`, so a handler can report a per-message failure without
+re-deriving which records came off SQS itself, even in a batch that mixes
+sources or where one SQS record yields more than one bronze key.
+`keys.py`'s `parse_bronze_key` reverses `bronze_key()` back into
+`chamber`/`year`/`doc_id`, shared by every stage that only receives a
 bronze key.
 
-`house_collect_handler.py` enqueues one SQS message per bronze key
+`house_collect/handler.py` enqueues one SQS message per bronze key
 `collect_house` actually wrote this run (never a `noop` key) to
 `EXTRACT_QUEUE_URL`, left unset by default so the handler still runs
-standalone with no queue configured. `extract_handler.py` accepts a batch of
-SQS records (batch size 1 in production, per #43) and reports a per-message
-failure via `batchItemFailures` (`ReportBatchItemFailures`) rather than
-letting one filing's exception fail the whole batch, using each
+standalone with no queue configured. `extract_data/handler.py` accepts a
+batch of SQS records (batch size 1 in production, per #43) and reports a
+per-message failure via `batchItemFailures` (`ReportBatchItemFailures`)
+rather than letting one filing's exception fail the whole batch, using each
 `BronzeKeyRecord.message_id` rather than every other record's raw shape; a
-plain or S3-event invocation still lets an exception raise, matching every
-other handler.
+plain or direct-S3-event invocation still lets an exception raise, matching
+every other handler.
 
 Locally, ElasticMQ (`docker-compose.yml`'s `elasticmq` service, port 9324)
 emulates SQS — chosen over LocalStack since LocalStack's SQS coverage is
@@ -210,12 +227,12 @@ DLQ posture #43 asks for on that stage, not more retries).
 
 ## Extract stage
 
-`src/capitol_lake/stages/extract.py` is the third caller of the bronze
+`src/extract_data/extract.py` is the third caller of the bronze
 contract's counterpart on the silver side. `extract_house_filing` takes a
 bronze PDF's bytes plus its `bronze_key`, parses `chamber`/`year`/`doc_id`
-back out of that key (`keys.parse_bronze_key`), routes to
+back out of that key (`shared.keys.parse_bronze_key`), routes to
 `digital_extract.extract_digital` or `scanned_extract.extract_scanned` via
-`house_collect.route_doc_id` (no manual classification), and serializes the
+`shared.doc_id.route_doc_id` (no manual classification), and serializes the
 resulting `Filing` and `Transaction` rows into two Hive-partitioned Parquet
 part files — one per silver table (`filings`, `transactions`), one part per
 `doc_id` (`silver_key`, ADR 0008). Every transaction row extracted is kept
@@ -223,7 +240,7 @@ regardless of `asset_type`, with `asset_type` and the original
 `asset_description` always present; this stage only routes and serializes,
 it never filters a row out. Like every other stage here, the pure function
 never touches S3 — it returns each part file's key and bytes, and
-`handlers/extract_handler.py` (real `boto3` client) reads the bronze PDF and
+`extract_data/handler.py` (real `boto3` client) reads the bronze PDF and
 writes both silver part files. It also raises `DocIdMismatchError` rather
 than write a row whose own `doc_id` disagrees with the bronze key it's
 partitioned under (the digital extractor reads `doc_id` from the PDF's own
@@ -286,15 +303,15 @@ The same pure function also runs as a plain call, with no container and no
 MinIO:
 
 ```bash
-uv run python -c "from capitol_lake.stages.stub import process; print(process('x'))"
+uv run python -c "from stub.process import process; print(process('x'))"
 ```
 
 ## Adding a new stage
 
-1. Add `stages/<name>.py` with a pure function: structured input in,
-   structured dict out. Write its tests in `tests/` against that function
-   only.
-2. Add `handlers/<name>_handler.py`: unpack the Lambda event, call the pure
+1. Add `src/<name>/<name>.py` with a pure function: structured input in,
+   structured dict out. Write its tests in `tests/units/<name>/` against
+   that function only.
+2. Add `src/<name>/handler.py`: unpack the Lambda event, call the pure
    function, return its result. No test needed.
 3. Add a `docker-compose.yml` service for it, copied from `stub-stage`,
    pointing `dockerfile` at a `docker/<name>.Dockerfile` (copy

@@ -9,6 +9,19 @@ heading when `development` is released to `master`.
 
 ### Changed
 
+- `src/`: split the single `src/capitol_lake` package into `src/shared/`
+  (code used by more than one Lambda image) plus one top-level package per
+  Lambda (`house_collect`, `senate_collect`, `senate_collect_automated`,
+  `senate_akamai_probe`, `extract_data`, `stub`), each with its own
+  `handler.py` (ADR-0014). Every `docker/*.Dockerfile` now `COPY`s `shared`
+  plus its own package only, instead of the whole tree, so a Lambda's image
+  can no longer carry another Lambda's code. `pyproject.toml` lists all
+  seven packages under `[tool.hatch.build.targets.wheel]`. `CODE_STANDARDS.md`
+  updated to document the new layout.
+- `tests/`: partitioned into `tests/units/` (every existing test, moved to
+  mirror the new `src/` layout — none of them touch live network, S3, or a
+  real Lambda) and `tests/e2e/` (empty scaffold for future real-runtime
+  tests, see `tests/e2e/README.md`).
 - `infra-cicd.yml`: `AWS_ROLE_ARN`, `TF_STATE_BUCKET`, and `FINOPS_ALERT_EMAIL`
   moved from repository variables to repository secrets, so GitHub masks them
   in Actions logs ahead of the repo's planned move to public (ADR-0009's
