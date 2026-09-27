@@ -18,7 +18,15 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/capitol_lake"]
+packages = [
+    "src/shared",
+    "src/house_collect",
+    "src/senate_collect",
+    "src/senate_collect_automated",
+    "src/senate_akamai_probe",
+    "src/extract_data",
+    "src/stub",
+]
 
 [tool.ruff]
 line-length = 100

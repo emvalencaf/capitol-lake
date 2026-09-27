@@ -43,9 +43,10 @@ RUN mkdir -p ${LAMBDA_TASK_ROOT} \
     && chmod +x /usr/local/bin/aws-lambda-rie
 
 WORKDIR ${LAMBDA_TASK_ROOT}
-COPY src/capitol_lake ${LAMBDA_TASK_ROOT}/capitol_lake
+COPY src/shared ${LAMBDA_TASK_ROOT}/shared
+COPY src/senate_collect_automated ${LAMBDA_TASK_ROOT}/senate_collect_automated
 COPY docker/extract-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["capitol_lake.handlers.senate_collect_automated_handler.handler"]
+CMD ["senate_collect_automated.handler.handler"]

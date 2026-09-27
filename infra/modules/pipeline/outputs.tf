@@ -34,6 +34,10 @@ output "extract_queue_url" {
   value = module.extract.queue_url
 }
 
+output "extract_queue_arn" {
+  value = module.extract.queue_arn
+}
+
 output "ecr_repository_urls" {
   description = "Map of stage name to its ECR repository URL, for building/pushing each stage's container image."
   value       = { for name, repo in aws_ecr_repository.this : name => repo.repository_url }

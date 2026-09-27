@@ -3,7 +3,7 @@
 
 Reads every `eval/senate_gold/*.json` file, routes its matching HTML from
 `eval/senate_fixtures/<doc_id>.html` through `extract_senate_filing`, scores
-the result against the gold transactions (`capitol_lake.evaluation`), and
+the result against the gold transactions (`extract_data.evaluation`), and
 prints a per-field report macro-averaged by filing then by set. Unlike
 `run_eval.py`'s House set, there is no digital/scanned split to break out by
 (Senate has one extractor for one source format), so this reports one
@@ -22,9 +22,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from capitol_lake.evaluation import SCORED_FIELDS, score_filing, score_set, transaction_row_for_eval
-from capitol_lake.stages.extract import transaction_row
-from capitol_lake.stages.senate_extract import extract_senate_html
+from extract_data.evaluation import SCORED_FIELDS, score_filing, score_set, transaction_row_for_eval
+from extract_data.extract import transaction_row
+from extract_data.senate_extract import extract_senate_html
 
 ROOT = Path(__file__).parent.parent
 GOLD_DIR = ROOT / "eval" / "senate_gold"

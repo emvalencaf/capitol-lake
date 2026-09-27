@@ -9,9 +9,11 @@
 # House and Senate collectors aren't SQS-triggered themselves (House is
 # EventBridge-scheduled, Senate is invoked manually or off the bronze
 # bucket's S3 event — both wired in `infra/modules/scheduling`); only
-# `extract` consumes from its own queue, which `house_collect_handler.py`
-# and a human's Senate upload both feed indirectly (house via SQS send,
-# senate via the S3 event, see #18's resolution).
+# `extract` consumes from its own queue, which `house_collect/handler.py`
+# and a human's Senate upload both feed (house sends an SQS message
+# directly; Senate's S3 event notification forwards onto that same queue
+# rather than invoking extract directly, ADR-0015, giving it the same
+# retry/DLQ handling — see #18's resolution).
 
 locals {
   stage_names = ["house-collect", "senate-collect", "senate-collect-automated", "extract"]

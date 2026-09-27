@@ -73,7 +73,7 @@ correctly.
 
 ## Senate (`extract_senate_filing`)
 
-Per-field score, same `capitol_lake.evaluation` machinery, from the first
+Per-field score, same `extract_data.evaluation` machinery, from the first
 run (2026-09-26), 40 real `/ptr/` filings fetched live from
 `efdsearch.senate.gov`. Senate has no digital/scanned split (ADR 0013: every
 Senate fixture is `kind == "html"`), so this reports one overall column, not
@@ -117,7 +117,7 @@ filing's extractor twice on the same bytes and assert byte-identical output
 ## Scored fields and averaging
 
 Both harnesses score the same 11 `Transaction`-level fields
-(`capitol_lake.evaluation.SCORED_FIELDS`): `owner`, `transaction_type`,
+(`extract_data.evaluation.SCORED_FIELDS`): `owner`, `transaction_type`,
 `asset_type`, `asset_description`, `transaction_date`, `value_min`,
 `value_max`, `notification_date`, `filing_status`, `sub_owner`,
 `description`. Ticker fields and everything on `Filing` are excluded — see

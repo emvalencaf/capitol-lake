@@ -52,7 +52,7 @@ duplicated).
 ```
 
 Each `transactions[]` entry mirrors the scored subset of the silver
-`Transaction` schema (`capitol_lake.schema.Transaction`), `line_no`
+`Transaction` schema (`shared.schema.Transaction`), `line_no`
 numbered in document order. Digital filings were labelled from pypdf's own
 generic `extract_text()` output (independent of this project's structural
 parser, so the gold set isn't circular against the code it scores).
@@ -64,7 +64,7 @@ and dollar-bracket checkboxes by eye, which the extractor itself cannot do
 
 ## Scored fields
 
-`capitol_lake.evaluation.SCORED_FIELDS`, all at the `Transaction` level:
+`extract_data.evaluation.SCORED_FIELDS`, all at the `Transaction` level:
 `owner`, `transaction_type`, `asset_type`, `asset_description`,
 `transaction_date`, `value_min`, `value_max`, `notification_date`,
 `filing_status`, `sub_owner`, `description`.
@@ -88,7 +88,7 @@ identically to a completely wrong one.
 
 ## Averaging
 
-`capitol_lake.evaluation.score_filing` averages each field's score across
+`extract_data.evaluation.score_filing` averages each field's score across
 one filing's gold transactions (a gold row with no matching predicted
 `line_no` scores 0.0 on every field — a missed row is a total miss).
 `score_set` then averages filing-level scores within a set (digital,
@@ -180,7 +180,7 @@ to those 2 crashing digital filings or the 10 scanned ones (no
 ## Senate gold set (`extract_senate_filing`)
 
 A parallel 40-filing gold set for the Senate HTML extractor (ADR 0013),
-scored with the same `capitol_lake.evaluation` machinery: `eval/senate_fixtures/<doc_id>.html`
+scored with the same `extract_data.evaluation` machinery: `eval/senate_fixtures/<doc_id>.html`
 (real Senate `/ptr/` pages, `manifest.json` recording each one's `doc_id`/`year`),
 `eval/senate_gold/<doc_id>.json` (same gold record format as above, minus
 `kind` — every fixture is `"html"`), and `scripts/run_senate_eval.py`

@@ -29,10 +29,11 @@ ENV LAMBDA_TASK_ROOT=/var/task
 COPY docker/extract-requirements.txt .
 RUN pip install --no-cache-dir -r extract-requirements.txt
 
-COPY src/capitol_lake ./capitol_lake
+COPY src/shared ./shared
+COPY src/extract_data ./extract_data
 
 COPY docker/extract-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["capitol_lake.handlers.extract_handler.handler"]
+CMD ["extract_data.handler.handler"]

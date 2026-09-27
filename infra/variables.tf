@@ -57,7 +57,7 @@ variable "ecr_repo_prefix" {
 }
 
 variable "llm_fallback_provider" {
-  description = "LLM_FALLBACK_PROVIDER for the extract Lambda (src/capitol_lake/llm_providers.py: lm_studio, gemini or groq)."
+  description = "LLM_FALLBACK_PROVIDER for the extract Lambda (src/shared/llm_providers.py: lm_studio, gemini or groq)."
   type        = string
   default     = "lm_studio"
 }

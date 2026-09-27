@@ -11,3 +11,5 @@ One concept per ADR under [`docs/adr/`](../../docs/adr/), summarizing its decisi
 * [ADR 0011: Extract stage packaging (Debian base image) and actual Lambda count (three, not four)](0011-extract-stage-alt-base-image-and-lambda-count.md)
 * [ADR 0012: Wiring the Terraform root stack -- bucket naming, SSM handoff, S3-event scoping, schedule input](0012-terraform-root-stack-wiring.md)
 * [ADR 0013: Senate HTML extraction -- no doc-id cross-check, Exchange as one row with two legs](0013-senate-html-extraction-design.md)
+* [ADR 0014: Shared package plus one top-level package per Lambda](0014-shared-plus-per-lambda-src-layout.md)
+* [ADR 0015: Senate to extract via SQS, not a direct S3-to-Lambda invoke](0015-senate-extract-via-sqs-not-direct-invoke.md)
