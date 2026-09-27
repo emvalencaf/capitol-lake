@@ -39,9 +39,8 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from dotenv import load_dotenv
 
-load_dotenv()
+from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -59,6 +58,8 @@ from extract_data.llm_extract import extract_llm
 from extract_data.scanned_extract import extract_scanned
 from shared.doc_id import route_doc_id
 from shared.llm_providers import Provider, provider_by_name
+
+load_dotenv()
 
 ROOT = Path(__file__).parent.parent
 GOLD_DIR = ROOT / "eval" / "gold"
