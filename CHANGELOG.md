@@ -9,6 +9,15 @@ heading when `development` is released to `master`.
 
 ### Added
 
+- `extract_data.llm_extract.extract_llm` (#89): a benchmark-only extractor
+  that reads a House PTR's transactions directly via an LLM (Groq or a
+  local LM Studio model), distinct from the existing per-field
+  `llm_fallback` stage (ADR 0019). `scripts/run_house_eval.py` gains
+  `--extractor {tesseract,llm}`, `--provider`, `--model`, `--llm-input
+  {text,vision}`, `--llm-runs` (a consistency check across repeated
+  extractions, replacing the determinism check for LLM output) and
+  `--sample`, so a small LLM can be benchmarked against Tesseract on the
+  same gold set and report format.
 - `scripts/setup-github-env.sh`: `up`/`down` script that automates
   `infra/README.md`'s "One-time GitHub setup" step via `gh` — creates or
   removes the `production` GitHub Environment (with a required-reviewer

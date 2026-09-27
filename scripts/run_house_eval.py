@@ -175,10 +175,11 @@ def consistency_scores(extractor: Extractor, filing: dict, runs: int) -> dict[st
     return consistency_set(attempts)
 
 
-def _print_field_table(title: str, by_kind: dict[str, dict[str, float]]) -> None:
+def _print_field_table(by_kind: dict[str, dict[str, float]], *, title: str | None = None) -> None:
     kinds = ("digital", "scanned", "overall")
     header = f"{'field':<22}" + "".join(f"{kind:>10}" for kind in kinds)
-    print(title)
+    if title is not None:
+        print(title)
     print(header)
     print("-" * len(header))
     for field in SCORED_FIELDS:
@@ -200,7 +201,7 @@ def _print_report(report: dict, filings: list[dict]) -> None:
     }
 
     accuracy_by_kind = {**report["by_kind"], "overall": report["overall"]}
-    _print_field_table("Accuracy vs. gold set:", accuracy_by_kind)
+    _print_field_table(accuracy_by_kind)
 
     # A kind whose filings mostly failed to extract prints a score, but
     # that score measures extraction coverage, not field accuracy — say so
@@ -330,7 +331,7 @@ def main() -> None:
         print()
 
     if consistency is not None:
-        _print_field_table(f"Consistency across {args.llm_runs} runs:", consistency)
+        _print_field_table(consistency, title=f"Consistency across {args.llm_runs} runs:")
 
     if determinism_failures is None:
         if args.llm_runs <= 1:

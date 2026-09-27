@@ -55,7 +55,7 @@ import pytesseract
 
 from extract_data import scanned_extract
 from extract_data.evaluation import SCORED_FIELDS
-from extract_data.llm_fallback import field_schema
+from extract_data.llm_fallback import fallback_schema
 from shared.doc_id import route_doc_id
 from shared.keys import parse_bronze_key
 from shared.llm_providers import Provider
@@ -98,13 +98,14 @@ class LlmExtraction:
 
 
 def transaction_schema() -> dict[str, Any]:
-    """One transaction's JSON-Schema object, covering every `SCORED_FIELDS` field."""
-    return {
-        "type": "object",
-        "properties": {field: field_schema(field) for field in SCORED_FIELDS},
-        "required": list(SCORED_FIELDS),
-        "additionalProperties": False,
-    }
+    """One transaction's JSON-Schema object, covering every `SCORED_FIELDS` field.
+
+    Delegates to `llm_fallback.fallback_schema` (built the same way, from
+    `SCORED_FIELDS` + the silver enums) so the two stages' structured-output
+    contracts can never drift apart from each other (ADR 0019's
+    comparability requirement).
+    """
+    return fallback_schema(SCORED_FIELDS)
 
 
 def page_schema() -> dict[str, Any]:
