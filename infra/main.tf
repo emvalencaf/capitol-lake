@@ -36,8 +36,8 @@ module "scheduling" {
   senate_collect_automated_function_arn  = module.pipeline.senate_collect_automated_function_arn
   senate_automated_schedule_expression   = var.senate_automated_schedule_expression
 
-  extract_function_name = module.pipeline.extract_function_name
-  extract_function_arn  = module.pipeline.extract_function_arn
+  extract_queue_arn = module.pipeline.extract_queue_arn
+  extract_queue_url = module.pipeline.extract_queue_url
 
   bronze_bucket_id  = module.storage.bronze_bucket_id
   bronze_bucket_arn = module.storage.bronze_bucket_arn

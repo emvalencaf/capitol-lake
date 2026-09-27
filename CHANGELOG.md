@@ -31,6 +31,17 @@ heading when `development` is released to `master`.
   updated to match.
 ### Fixed
 
+- `infra`/`shared/orchestration.py`: Senate's bronze-to-extract chain
+  invoked `extract`'s Lambda directly off an S3 event notification, with no
+  SQS message behind it — unlike House, which chains over extract's own SQS
+  queue. A failed Senate-triggered extract therefore had nothing to retry or
+  dead-letter (`BronzeKeyRecord.message_id` was always `None` for an
+  S3-sourced record). The bronze bucket's S3 notification now targets
+  extract's own SQS queue instead (an `aws_sqs_queue_policy` scopes
+  `s3.amazonaws.com`'s `sqs:SendMessage` to the bucket's ARN);
+  `bronze_key_records_from_event` was extended to unpack an SQS record
+  whose body is a forwarded S3 notification, pairing every bronze key it
+  finds with the outer SQS record's `messageId` (ADR-0015).
 - `infra`: `house-collect`'s Lambda timeout was left at the `lambda-stage`
   default (60s), which times out mid-run (`Sandbox.Timedout`) on a
   full-year backfill — confirmed via `scripts/invoke-collectors.sh house`:

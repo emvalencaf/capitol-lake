@@ -31,12 +31,14 @@ variable "senate_automated_schedule_expression" {
   default     = "rate(1 day)"
 }
 
-variable "extract_function_name" {
-  type = string
+variable "extract_queue_arn" {
+  description = "ARN of extract's own SQS queue (module.pipeline's extract_queue_arn output). The bronze bucket's S3 event notification forwards onto this queue instead of invoking extract's Lambda directly (ADR-0015), so a Senate-triggered extract gets the same retry/DLQ handling House's own SQS-chained messages already do."
+  type        = string
 }
 
-variable "extract_function_arn" {
-  type = string
+variable "extract_queue_url" {
+  description = "URL of extract's own SQS queue (module.pipeline's extract_queue_url output), required by aws_sqs_queue_policy's queue_url argument (the queue resource's ARN alone isn't accepted there)."
+  type        = string
 }
 
 variable "bronze_bucket_id" {
