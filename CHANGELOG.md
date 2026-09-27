@@ -7,6 +7,8 @@ heading when `development` is released to `master`.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-27
+
 ### Added
 
 - `extract_data.llm_extract.extract_llm` (#89): a benchmark-only extractor
