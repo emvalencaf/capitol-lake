@@ -23,7 +23,6 @@ packages = [
     "src/house_collect",
     "src/senate_collect",
     "src/senate_collect_automated",
-    "src/senate_akamai_probe",
     "src/extract_data",
     "src/stub",
 ]

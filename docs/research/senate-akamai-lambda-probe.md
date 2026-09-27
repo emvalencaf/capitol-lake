@@ -78,11 +78,13 @@ maintenance/brittleness tradeoffs, e.g. a browser binary in the Lambda
 image, sensitivity to the site's markup changing) is no longer blocked on
 this unverified fact — it's confirmed workable, not merely hypothesized.
 
-**Housekeeping**: this ticket's probe infra
-(`infra/probes/senate-akamai-probe/`) has no ongoing purpose now that the
-question is answered — tear it down with
-`./scripts/deploy-senate-akamai-probe.sh down` (or `terraform destroy`)
-once #28 has what it needs from this result.
+**Housekeeping**: this ticket's probe infra (`infra/probes/senate-akamai-probe/`)
+had no ongoing purpose once the question above was answered, and #67 moved
+its reusable logic (the agreement-click flow, `classify_probe_result`) into
+`src/shared/senate_efd_classification.py` and
+`src/senate_collect_automated/`. The probe's Terraform, Lambda code, and
+deploy script were torn down and removed from the repo in #70; see that
+ticket for the retirement.
 
 ## Attempts (chronological)
 
