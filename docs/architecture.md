@@ -44,8 +44,8 @@ an automated Lambda that drives the search through a real headless browser
 session, and a manual fallback (a human runs the same flow locally and
 uploads the result) for whenever the automated path doesn't clear the
 block. Both paths write to the same Bronze bucket; there is no EventBridge
-schedule for Senate, so a bronze write is what triggers the next stage
-(directly, via an S3 event notification), not an SQS enqueue.
+schedule for Senate, but each path's own handler enqueues the new bronze
+key onto extract's SQS queue itself, exactly like House.
 
 Every Lambda in the pipeline, House and Senate collectors included, ships
 as a container image from ECR rather than a zip/layers bundle — see
@@ -128,15 +128,20 @@ extractor itself.
 
 The diagram below covers the AWS services involved: EventBridge triggers
 the collector Lambdas on a schedule, House and Senate both land in the same
-S3 Bronze bucket, the extract Lambda picks up new keys from SQS (House) or
-an S3 event notification (Senate) and writes to S3 Silver, every Lambda's
-image comes from ECR, GitHub Actions deploys the Terraform stack through an
-OIDC-federated IAM role (never long-lived AWS keys), and a tag-filtered AWS
-Budget publishes spend alerts through SNS.
+S3 Bronze bucket, every collector enqueues its own written keys onto the
+extract Lambda's SQS queue (ADR-0016), which extract picks up and writes to
+S3 Silver, every Lambda's image comes from ECR, GitHub Actions deploys the
+Terraform stack through an OIDC-federated IAM role (never long-lived AWS
+keys), and a tag-filtered AWS Budget publishes spend alerts through SNS.
+
+<!-- TODO: diagrams/assets/architecture-system.svg (and its raw HTML source)
+still show extract picking up Senate via an S3 event notification —
+ADR-0016 removed that bridge; every collector enqueues onto SQS directly
+now, including Senate's two paths. Needs a re-render. -->
 
 ![System architecture: EventBridge-scheduled Lambdas write filings to S3
-Bronze; an extract Lambda reads from SQS or an S3 event and writes to S3
-Silver, alongside ECR, IAM/OIDC and SNS budget
+Bronze; an extract Lambda reads from SQS and writes to S3 Silver, alongside
+ECR, IAM/OIDC and SNS budget
 alerting](diagrams/assets/architecture-system.svg)
 
 See [ADR 0009](adr/0009-terraform-module-structure-and-cicd.md) for the

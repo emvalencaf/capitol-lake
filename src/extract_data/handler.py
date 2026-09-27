@@ -67,6 +67,7 @@ from shared.doc_id import route_doc_id
 from shared.llm_providers import provider_from_env
 from shared.orchestration import bronze_key_records_from_event
 from shared.schema import AssetType, Transaction
+from shared.wide_event import log_progress, wide_event
 
 USER_AGENT = "capitol-lake ticker resolver (contact: edsonmvf@gmail.com)"
 BRONZE_BUCKET = os.environ.get("BRONZE_BUCKET", "bronze")
@@ -162,11 +163,12 @@ def _process_one(s3_client, bronze_key: str) -> dict:
     pdf_bytes = s3_client.get_object(Bucket=BRONZE_BUCKET, Key=bronze_key)["Body"].read()
 
     kind = route_doc_id(Path(bronze_key).stem)
+    llm_fallback = _build_llm_fallback(kind, pdf_bytes)
     result = extract_house_filing(
         pdf_bytes,
         bronze_key=bronze_key,
         resolve_ticker=_resolve_ticker,
-        llm_fallback=_build_llm_fallback(kind, pdf_bytes),
+        llm_fallback=llm_fallback,
     )
 
     for table in ("filings", "transactions"):
@@ -177,25 +179,74 @@ def _process_one(s3_client, bronze_key: str) -> dict:
         "kind": result["kind"],
         "filings_key": result["filings"]["key"],
         "transactions_key": result["transactions"]["key"],
+        # Whether `_build_llm_fallback`'s gates (feature flag, digital kind,
+        # eval report present, eligible fields below threshold) let the LLM
+        # fallback run at all for this filing — not whether it actually
+        # changed any row, which `extract_house_filing` doesn't report.
+        "llm_fallback_used": llm_fallback is not None,
     }
 
 
 def handler(event: dict, context: object) -> dict:
-    s3_client = boto3.client("s3", endpoint_url=os.environ.get("AWS_ENDPOINT_URL_S3"))
-    records = bronze_key_records_from_event(event)
+    with wide_event("extract", context) as log:
+        s3_client = boto3.client("s3", endpoint_url=os.environ.get("AWS_ENDPOINT_URL_S3"))
+        records = bronze_key_records_from_event(event)
+        log["record_count"] = len(records)
 
-    if "bronze_key" in event:
-        return _process_one(s3_client, records[0].bronze_key)
+        if "bronze_key" in event:
+            log["mode"] = "direct"
+            result = _process_one(s3_client, records[0].bronze_key)
+            log["kind"] = result["kind"]
+            log["llm_fallback_used"] = result["llm_fallback_used"]
+            return result
 
-    if not any(record.message_id is not None for record in records):
-        results = [_process_one(s3_client, record.bronze_key) for record in records]
-        return {"results": results}
+        total = len(records)
 
-    batch_item_failures = []
-    for record in records:
-        try:
-            _process_one(s3_client, record.bronze_key)
-        except Exception:
-            if record.message_id is not None:
-                batch_item_failures.append({"itemIdentifier": record.message_id})
-    return {"batchItemFailures": batch_item_failures}
+        if not any(record.message_id is not None for record in records):
+            log["mode"] = "batch_no_sqs"
+            results = []
+            for index, record in enumerate(records, start=1):
+                result = _process_one(s3_client, record.bronze_key)
+                results.append(result)
+                log_progress(
+                    "extract",
+                    context,
+                    index=index,
+                    total=total,
+                    bronze_key=record.bronze_key,
+                    kind=result["kind"],
+                    llm_fallback_used=result["llm_fallback_used"],
+                )
+            log["processed_count"] = len(results)
+            return {"results": results}
+
+        log["mode"] = "sqs_batch"
+        batch_item_failures = []
+        for index, record in enumerate(records, start=1):
+            try:
+                result = _process_one(s3_client, record.bronze_key)
+                log_progress(
+                    "extract",
+                    context,
+                    index=index,
+                    total=total,
+                    bronze_key=record.bronze_key,
+                    kind=result["kind"],
+                    llm_fallback_used=result["llm_fallback_used"],
+                    outcome="processed",
+                )
+            except Exception as exc:
+                log_progress(
+                    "extract",
+                    context,
+                    index=index,
+                    total=total,
+                    bronze_key=record.bronze_key,
+                    outcome="failed",
+                    error={"type": type(exc).__name__, "message": str(exc)},
+                )
+                if record.message_id is not None:
+                    batch_item_failures.append({"itemIdentifier": record.message_id})
+        log["failed_count"] = len(batch_item_failures)
+        log["processed_count"] = len(records) - len(batch_item_failures)
+        return {"batchItemFailures": batch_item_failures}

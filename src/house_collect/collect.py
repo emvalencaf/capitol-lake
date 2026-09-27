@@ -1,11 +1,14 @@
 """House collector: pure decision logic for the annual PTR index.
 
 Parses the House Clerk's annual index ZIP, routes each filing by its
-document-id prefix (`shared.doc_id.route_doc_id`), rate-limits the fetch
-loop, and drives the chamber-agnostic `bronze_write` contract. All network
-and S3 access is injected as callables into `collect_house`, so index
-parsing and rate limiting are all testable with no live network call; only
-`house_collect.handler` wires this to real HTTP and S3 clients.
+document-id prefix (`shared.doc_id.route_doc_id`), skips a `doc_id` already
+on record with no fetch at all (see `collect_house`'s docstring for why
+that's safe), rate-limits the fetch loop for everything else, and drives the
+chamber-agnostic `bronze_write` contract. All network and S3 access is
+injected as callables into `collect_house`, so index parsing, the known-
+doc-id set, and rate limiting are all testable with no live network call and
+no real S3; only `house_collect.handler` wires this to real HTTP and a real
+S3 listing.
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ from io import BytesIO
 
 from shared.bronze_write import bronze_write
 from shared.doc_id import UnknownDocIdPrefixError, route_doc_id
-from shared.keys import bronze_key, bronze_meta_key
+from shared.keys import bronze_key
 
 # The House Clerk's Financial Disclosure site serves every PTR (digital or
 # scanned) under the same annual path; only the doc-id prefix distinguishes
@@ -110,54 +113,81 @@ def collect_house(
     *,
     fetch_index: Callable[[str], bytes],
     fetch_filing: Callable[[str], bytes],
-    read_existing_sha256: Callable[[str], str | None],
+    known_doc_ids: Callable[[], set[str]],
     write_bytes: Callable[[str, bytes], None],
     now: Callable[[], str],
     rate_limiter: RateLimiter | None = None,
+    on_progress: Callable[[dict], None] | None = None,
 ) -> dict:
     """Collect one year of House PTR filings into bronze.
 
-    Fetches the annual index via `fetch_index(url)`, routes and downloads
-    each filing via `fetch_filing(url)` (rate-limited by `rate_limiter`, ~1
-    request/second by default), and writes it through the hash-gated
-    `bronze_write` contract: `read_existing_sha256(meta_key)` supplies the
-    prior hash and `write_bytes(key, bytes)` performs the actual write, both
-    skipped entirely when `bronze_write` decides the candidate is a no-op.
+    Fetches the annual index via `fetch_index(url)`, calls `known_doc_ids()`
+    *once* to get every `doc_id` already on record, then for each routed
+    entry checks membership in that set *before* touching the network: a
+    known `doc_id` is trusted as immutable and skipped with no
+    `fetch_filing` call at all, no `rate_limiter.wait()` charged against it,
+    and no re-hash (ADR-0018 — `known_doc_ids` is a single listing, not one
+    read per entry, since the write path below never needs a prior hash
+    value, only whether one exists). Only a `doc_id` never seen before gets
+    fetched (rate-limited by `rate_limiter`, ~1 request/second by default)
+    and written through `bronze_write`, which will therefore always plan a
+    `"write"` for it (`existing_sha256` is `None` by construction on this
+    path — there is nothing to hash-compare against).
+
+    This trades away detecting a same-`doc_id` content correction after the
+    fact — `docs/research/house-ptr-amendment-doc-id-behavior.md` found, with
+    high confidence from the House Clerk's own PTR form/instructions and a
+    full year's live index, that a correction is filed and indexed as a
+    brand-new `DocID`, never a same-`DocID` overwrite, though no primary
+    source states that as an absolute guarantee. If that assumption ever
+    turns out wrong for some `doc_id`, this collector will keep serving the
+    stale bronze copy indefinitely for it, with no automatic way to notice.
+
     Network and storage access are fully injected so this function runs
     against fakes in tests, with no live network call and no real S3.
+
+    `on_progress`, if given, is called after every entry with
+    `{"index": i, "total": len(entries), "doc_id": ..., "action": "write" |
+    "skip"}` (1-based `index`) — a hook for the handler to surface progress
+    on a run that can take minutes, not a logging concern of this pure
+    function's own.
     """
     rate_limiter = rate_limiter or RateLimiter()
     entries = parse_house_index(fetch_index(house_index_url(year)), year)
+    total = len(entries)
+    existing_doc_ids = known_doc_ids()
 
     written: list[str] = []
-    noop: list[str] = []
-    for entry in entries:
-        rate_limiter.wait()
+    skipped: list[str] = []
+    for index, entry in enumerate(entries, start=1):
+        if entry.doc_id in existing_doc_ids:
+            skipped.append(bronze_key("house", entry.year, entry.doc_id, "pdf"))
+            action = "skip"
+        else:
+            rate_limiter.wait()
 
-        url = house_filing_url(entry.doc_id, entry.year)
-        candidate_bytes = fetch_filing(url)
-        meta_key = bronze_meta_key(bronze_key("house", entry.year, entry.doc_id, "pdf"))
-        existing_sha256 = read_existing_sha256(meta_key)
+            url = house_filing_url(entry.doc_id, entry.year)
+            candidate_bytes = fetch_filing(url)
 
-        plan = bronze_write(
-            chamber="house",
-            year=entry.year,
-            doc_id=entry.doc_id,
-            ext="pdf",
-            candidate_bytes=candidate_bytes,
-            existing_sha256=existing_sha256,
-            source_url=url,
-            fetched_at=now(),
-            index_row=entry.index_row,
-        )
+            plan = bronze_write(
+                chamber="house",
+                year=entry.year,
+                doc_id=entry.doc_id,
+                ext="pdf",
+                candidate_bytes=candidate_bytes,
+                existing_sha256=None,
+                source_url=url,
+                fetched_at=now(),
+                index_row=entry.index_row,
+            )
 
-        if plan["action"] == "noop":
-            noop.append(plan["key"])
-            continue
+            meta = {**plan["meta"], "kind": entry.kind}
+            write_bytes(plan["key"], candidate_bytes)
+            write_bytes(plan["meta_key"], json.dumps(meta).encode("utf-8"))
+            written.append(plan["key"])
+            action = "write"
 
-        meta = {**plan["meta"], "kind": entry.kind}
-        write_bytes(plan["key"], candidate_bytes)
-        write_bytes(plan["meta_key"], json.dumps(meta).encode("utf-8"))
-        written.append(plan["key"])
+        if on_progress is not None:
+            on_progress({"index": index, "total": total, "doc_id": entry.doc_id, "action": action})
 
-    return {"year": year, "written": written, "noop": noop}
+    return {"year": year, "written": written, "skipped": skipped}

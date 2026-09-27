@@ -12,11 +12,12 @@ already-captured JSON body from the eFD search UI's own DataTables endpoint
 (`POST /search/report/data/`) — this module never scripts the search
 itself. Index parsing/routing lives in `shared.senate_index` (also used by
 `senate_collect_automated` and `senate_akamai_probe`); `collect_senate`
-below rate-limits the individual filing fetches (~1 request/second) and
-drives the chamber-agnostic `bronze_write` contract, exactly as
-`house_collect` does. Network and S3 access are injected as callables, so
-this is testable with no live network call; only `senate_collect.handler`
-wires it to a real HTTP client.
+below skips a `filing_id` already on record with no fetch at all (ADR-0018,
+same policy `collect_house` applies to House), rate-limits the fetch loop
+for everything else (~1 request/second), and drives the chamber-agnostic
+`bronze_write` contract, exactly as `house_collect` does. Network and S3
+access are injected as callables, so this is testable with no live network
+call; only `senate_collect.handler` wires it to a real HTTP client.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ import json
 from collections.abc import Callable
 
 from shared.bronze_write import bronze_write
-from shared.keys import bronze_key, bronze_meta_key
+from shared.keys import bronze_key
 from shared.senate_index import RateLimiter, parse_senate_index, senate_filing_url
 
 
@@ -33,57 +34,80 @@ def collect_senate(
     response: dict,
     *,
     fetch_filing: Callable[[str], bytes],
-    read_existing_sha256: Callable[[str], str | None],
+    known_doc_ids: Callable[[], set[str]],
     write_bytes: Callable[[str, bytes], None],
     now: Callable[[], str],
     rate_limiter: RateLimiter | None = None,
+    on_progress: Callable[[dict], None] | None = None,
 ) -> dict:
     """Collect the `/ptr/` filings in a captured Senate eFD search response into bronze.
 
     Routes and filters `response` to `/ptr/` entries via `parse_senate_index`,
-    then downloads each filing's HTML via `fetch_filing(url)` (rate-limited
-    by `rate_limiter`, ~1 request/second by default) and writes it through
-    the hash-gated `bronze_write` contract: `read_existing_sha256(meta_key)`
-    supplies the prior hash and `write_bytes(key, bytes)` performs the
-    actual write, both skipped entirely when `bronze_write` decides the
-    candidate is a no-op. A filing's UUID (and an amendment's own, separate
-    UUID) is used as `doc_id` unchanged, so the existing idempotency
-    contract applies without modification. Network and storage access are
-    fully injected so this function runs against fakes in tests, with no
-    live network call and no real S3.
+    calls `known_doc_ids()` *once* to get every filing UUID already on
+    record, then for each entry checks membership in that set *before*
+    touching the network: a known UUID is trusted as immutable and skipped
+    with no `fetch_filing` call at all and no `rate_limiter.wait()` charged
+    against it (ADR-0018 — unlike House, this is *not* backed by
+    primary-source research confirming a Senate eFD amendment always gets
+    its own separate UUID; that assumption comes only from this repo's own
+    prior reading of the site's behavior, unverified independently. If it
+    ever turns out wrong for some UUID, this collector will keep serving the
+    stale bronze copy for it indefinitely, with no automatic way to notice).
+    Only a UUID never seen before gets fetched (rate-limited by
+    `rate_limiter`, ~1 request/second by default) and written through
+    `bronze_write`, which will therefore always plan a `"write"` for it.
+    Network and storage access are fully injected so this function runs
+    against fakes in tests, with no live network call and no real S3.
+
+    `on_progress`, if given, is called after every entry with
+    `{"index": i, "total": len(entries), "doc_id": ..., "action": "write" |
+    "skip"}` (1-based `index`, `doc_id` here is the filing's UUID) — a hook
+    for the handler to surface progress on a run that can take minutes, not
+    a logging concern of this pure function's own.
     """
     rate_limiter = rate_limiter or RateLimiter()
     entries = parse_senate_index(response)
+    total = len(entries)
+    existing_doc_ids = known_doc_ids()
 
     written: list[str] = []
-    noop: list[str] = []
-    for entry in entries:
-        rate_limiter.wait()
+    skipped: list[str] = []
+    for index, entry in enumerate(entries, start=1):
+        if entry.filing_id in existing_doc_ids:
+            skipped.append(bronze_key("senate", entry.year, entry.filing_id, "html"))
+            action = "skip"
+        else:
+            rate_limiter.wait()
 
-        url = senate_filing_url(entry.filing_id)
-        candidate_bytes = fetch_filing(url)
-        meta_key = bronze_meta_key(bronze_key("senate", entry.year, entry.filing_id, "html"))
-        existing_sha256 = read_existing_sha256(meta_key)
+            url = senate_filing_url(entry.filing_id)
+            candidate_bytes = fetch_filing(url)
 
-        plan = bronze_write(
-            chamber="senate",
-            year=entry.year,
-            doc_id=entry.filing_id,
-            ext="html",
-            candidate_bytes=candidate_bytes,
-            existing_sha256=existing_sha256,
-            source_url=url,
-            fetched_at=now(),
-            index_row=entry.index_row,
-        )
+            plan = bronze_write(
+                chamber="senate",
+                year=entry.year,
+                doc_id=entry.filing_id,
+                ext="html",
+                candidate_bytes=candidate_bytes,
+                existing_sha256=None,
+                source_url=url,
+                fetched_at=now(),
+                index_row=entry.index_row,
+            )
 
-        if plan["action"] == "noop":
-            noop.append(plan["key"])
-            continue
+            meta = {**plan["meta"], "kind": entry.kind}
+            write_bytes(plan["key"], candidate_bytes)
+            write_bytes(plan["meta_key"], json.dumps(meta).encode("utf-8"))
+            written.append(plan["key"])
+            action = "write"
 
-        meta = {**plan["meta"], "kind": entry.kind}
-        write_bytes(plan["key"], candidate_bytes)
-        write_bytes(plan["meta_key"], json.dumps(meta).encode("utf-8"))
-        written.append(plan["key"])
+        if on_progress is not None:
+            on_progress(
+                {
+                    "index": index,
+                    "total": total,
+                    "doc_id": entry.filing_id,
+                    "action": action,
+                }
+            )
 
-    return {"years": sorted({e.year for e in entries}), "written": written, "noop": noop}
+    return {"years": sorted({e.year for e in entries}), "written": written, "skipped": skipped}
