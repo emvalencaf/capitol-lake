@@ -1,0 +1,49 @@
+{
+  "doc_id": "20026696",
+  "kind": "digital",
+  "year": 2025,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "self",
+      "transaction_type": "purchase",
+      "asset_type": "cryptocurrency",
+      "asset_description": "Ethereum Crypto currency",
+      "transaction_date": "2025-01-03",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2025-01-03",
+      "filing_status": "New",
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "self",
+      "transaction_type": "purchase",
+      "asset_type": "cryptocurrency",
+      "asset_description": "Virtuals Protocol",
+      "transaction_date": "2025-01-03",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2025-01-03",
+      "filing_status": "New",
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 3,
+      "owner": "self",
+      "transaction_type": "sale_full",
+      "asset_type": "cryptocurrency",
+      "asset_description": "Virtuals Protocol",
+      "transaction_date": "2025-01-12",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2025-01-12",
+      "filing_status": "New",
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}

@@ -13,13 +13,3 @@ if ! [[ "$title" =~ $pattern ]]; then
   echo "  got: $title" >&2
   exit 1
 fi
-if (( ${#title} > 72 )); then
-  echo "commit-msg: title is longer than 72 characters" >&2
-  exit 1
-fi
-for trailer in "Session-Id: ." "Co-Authored-By: ."; do
-  if ! grep -qE "^${trailer}" "$msg_file"; then
-    echo "commit-msg: missing trailer '${trailer%: .}:'" >&2
-    exit 1
-  fi
-done

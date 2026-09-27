@@ -1,0 +1,35 @@
+{
+  "doc_id": "d32a2469-2157-4352-886c-cc992fd13d2f",
+  "kind": "html",
+  "year": 2025,
+  "transactions": [
+    {
+      "line_no": 2,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Invesco Short Term Treasury ETF",
+      "transaction_date": "2025-06-11",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 1,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Broadcom Inc. - Common Stock",
+      "transaction_date": "2025-06-11",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}

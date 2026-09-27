@@ -18,6 +18,18 @@ dist/
 build/
 coverage/
 
+# Terraform (ADR-0009: .terraform.lock.hcl IS committed, don't ignore it)
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+!infra/backend.hcl.example
+backend.hcl
+
 # Agent local state
 .claude/settings.local.json
 graphify-out/

@@ -1,0 +1,12 @@
+# Runtime dependencies for the extract stage's Lambda container image.
+# Mirrors pyproject.toml's dependency versions plus boto3 and awslambdaric,
+# neither bundled by a non-AWS base image (see extract.Dockerfile).
+boto3>=1.35
+beautifulsoup4>=4.13.0
+lxml>=5.3.0
+numpy>=2.4.6
+pyarrow>=25.0.1
+pypdf>=6.19.0
+pypdfium2>=5.13.0
+pytesseract>=0.3.13
+awslambdaric>=2.2.1

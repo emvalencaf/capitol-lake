@@ -23,7 +23,8 @@ Workflow:
 1. `git switch development && git pull`
 2. `git switch -c <tag>/<short-description>` (e.g. `feat/query-skill`)
 3. Commit following the convention below.
-4. Open a PR **into `development`**. Delete the branch after merge.
+4. Open a PR **into `development`**. Keep the branch after merge (do not
+   delete it) so work stays traceable.
 5. To release, open a PR from `development` **into `master`** and update
    [CHANGELOG.md](CHANGELOG.md).
 
@@ -58,8 +59,7 @@ tag(subject/subsubject): short summary
 - `subject/subsubject` — the area touched, from broad to narrow, e.g.
   `skills/query`, `docs/contributing`. `subsubject` is optional:
   `feat(skills): ...` is valid.
-- `summary` — imperative mood, lowercase, no trailing period, ≲ 72 characters
-  for the whole title.
+- `summary` — imperative mood, lowercase, no trailing period.
 
 ### Body
 
@@ -70,17 +70,20 @@ Separated from the title by a blank line. Brief, in English:
 
 ### Trailers
 
-Every commit ends with, in this order:
+A commit produced by a Claude Code session may end with:
 
 ```
 Session-Id: <session uuid>
 Co-Authored-By: <model name> <noreply@anthropic.com>
 ```
 
-- `Session-Id` is the id of the Claude Code session that produced the change.
-  It is the UUID in the session's scratchpad path and transcript filename.
-- `Co-Authored-By` names the model that co-authored the commit, exactly as given
-  in the session's attribution instructions.
+Both are optional.
+
+- `Session-Id`, when present, is the id of the Claude Code session that
+  produced the change. It is the UUID in the session's scratchpad path and
+  transcript filename.
+- `Co-Authored-By`, when present, names the model that co-authored the
+  commit, exactly as given in the session's attribution instructions.
 
 ### Example
 
@@ -101,3 +104,5 @@ Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 - Title follows the commit title format; description explains why and what.
 - Follow [CODE_STANDARDS.md](CODE_STANDARDS.md).
 - Add an entry to [CHANGELOG.md](CHANGELOG.md) under `Unreleased`.
+- Do not delete the source branch when merging (no `--delete-branch`); branches
+  are kept for traceability.

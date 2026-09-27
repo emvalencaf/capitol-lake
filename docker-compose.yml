@@ -1,0 +1,149 @@
+services:
+  minio:
+    image: quay.io/minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Creates the bronze/silver buckets matching the S3 key layout, then exits.
+  minio-init:
+    image: quay.io/minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin} &&
+      mc mb -p local/bronze local/silver &&
+      exit 0
+      "
+
+  # Local SQS emulation for the collect -> extract handoff (#43): a lightweight,
+  # free complement to MinIO's S3 emulation (LocalStack's SQS is Hobby-plan/
+  # non-commercial-only per docs/research/free-tool-inventory.md; ElasticMQ is
+  # Apache-2.0 with no such restriction). `docker/elasticmq.conf` pre-creates
+  # the `extract-queue` queue on boot.
+  elasticmq:
+    image: softwaremill/elasticmq-native:latest
+    ports:
+      - "9324:9324"
+    volumes:
+      - ./docker/elasticmq.conf:/opt/elasticmq.conf:ro
+
+  # Stub pipeline stage, packaged and run the same way every future stage
+  # will be: a Lambda container image invoked through the Runtime Interface
+  # Emulator the base image provides. See docs/local-dev.md.
+  stub-stage:
+    build:
+      context: .
+      dockerfile: docker/lambda.Dockerfile
+    ports:
+      - "9100:8080"
+    environment:
+      AWS_ENDPOINT_URL_S3: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_REGION: us-east-1
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
+  # House collector: fetches the annual index and routes/stores PTR
+  # filings into bronze. See docs/local-dev.md.
+  house-collect-stage:
+    build:
+      context: .
+      dockerfile: docker/house_collect.Dockerfile
+    ports:
+      - "9101:8080"
+    environment:
+      AWS_ENDPOINT_URL_S3: http://minio:9000
+      AWS_ENDPOINT_URL_SQS: http://elasticmq:9324
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_REGION: us-east-1
+      BRONZE_BUCKET: bronze
+      EXTRACT_QUEUE_URL: http://elasticmq:9324/000000000000/extract-queue
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      elasticmq:
+        condition: service_started
+
+  # Senate collector: fetches `/ptr/` filings by id and stores them into
+  # bronze. Not scheduled (#18); invoked manually with a locally exported
+  # search-result payload. See docs/local-dev.md.
+  senate-collect-stage:
+    build:
+      context: .
+      dockerfile: docker/senate_collect.Dockerfile
+    ports:
+      - "9102:8080"
+    environment:
+      AWS_ENDPOINT_URL_S3: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_REGION: us-east-1
+      BRONZE_BUCKET: bronze
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
+  # Automated Senate collector (#68): drives the full eFD PTR search-and-
+  # fetch flow itself via headless Playwright (#67) instead of requiring a
+  # human-captured search response. Packaged from a non-AWS base image
+  # (docker/senate_collect_automated.Dockerfile) for the same reason
+  # extract-stage is, since Playwright's Chromium needs real shared
+  # libraries the AWS Lambda base image doesn't carry. See docs/local-dev.md.
+  senate-collect-automated-stage:
+    build:
+      context: .
+      dockerfile: docker/senate_collect_automated.Dockerfile
+    ports:
+      - "9104:8080"
+    environment:
+      AWS_ENDPOINT_URL_S3: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_REGION: us-east-1
+      BRONZE_BUCKET: bronze
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
+  # Extraction: routes a House PTR to its extractor and writes both silver
+  # Parquet parts. Packaged from a non-AWS base image (docker/extract.Dockerfile)
+  # since it's the one stage needing Tesseract, which the AWS Lambda base image
+  # can't `dnf install` (ADR-0001). Triggered by house-collect-stage's SQS
+  # messages in production; invoked directly here the same way every other
+  # stage's RIE endpoint is. See docs/local-dev.md.
+  extract-stage:
+    build:
+      context: .
+      dockerfile: docker/extract.Dockerfile
+    ports:
+      - "9103:8080"
+    environment:
+      AWS_ENDPOINT_URL_S3: http://minio:9000
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      AWS_REGION: us-east-1
+      BRONZE_BUCKET: bronze
+      SILVER_BUCKET: silver
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+
+volumes:
+  minio-data:

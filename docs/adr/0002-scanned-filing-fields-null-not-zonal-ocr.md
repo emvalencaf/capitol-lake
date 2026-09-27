@@ -1,0 +1,13 @@
+# Accept null transaction type and cap-gains flag for scanned filings, no zonal OCR
+
+Full-page Tesseract OCR on scanned House PTRs (~13% of filings) produces garbled multi-column noise for the `transaction_type` and `cap_gains` columns, while asset name and dates survive. A fixed-crop "zonal OCR" pass per column could recover them, but it rests on an unverified assumption (the paper form layout is identical across years/filers) and would need calibration work with no existing crop code — an uncertain-effort spike outside the ~6h/week, free-tools-only budget for Phase 1+2.
+
+Decided: extraction reports `transaction_type` and `cap_gains` as null with low confidence for scanned filings; the silver schema's per-field confidence/provenance columns make this an honest result, not a defect. `transaction_type` is still scored in the evaluation set (issue #8) with a digital/scanned breakdown, so the near-zero scanned accuracy for that field is visible by design. Zonal OCR, and the form-layout verification it would require, is deferred to a later phase.
+
+## Addendum (#37): `value_range` is the same problem, and `cap_gains` doesn't exist yet
+
+Real scanned House PTR fixtures (`house-scanned-pdf` extractor, issue #37) show the "Amount of Transaction" column is *also* a lettered checkbox grid (A–K, one box per dollar bracket) — a hand checkmark or typed `X`, not printed text — on every sampled scanned filing across three form years (2020–2022) and three filers. This is the identical problem this ADR already declined to solve for `transaction_type`: resolving a checked box to a specific letter needs the same unverified fixed-form-layout assumption zonal OCR would need. There is no cheaper path for `value_range` than for `transaction_type`.
+
+Decided: `value_range` is null with low confidence for scanned filings too, for the same reason and under the same deferral as `transaction_type`. The silver schema's `Transaction.value_range` and `Transaction.transaction_type` both became `| None` to allow this (previously non-nullable, since the digital extractor always resolves both from typed text).
+
+Separately: `cap_gains` does not exist as a field on `Transaction` in the current silver schema (issue #2/#5 never added it — the sampled scanned forms have no capital-gains checkbox either). This ADR's and issue #37's mentions of `cap_gains` describe an aspiration carried from the original map (#30), not a field that exists to null. Nothing in `house-scanned-pdf` sets it; this is a gap for whoever adds `cap_gains` to the schema to resolve, not something this extractor can honor today.

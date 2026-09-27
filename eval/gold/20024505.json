@@ -1,0 +1,21 @@
+{
+  "doc_id": "20024505",
+  "kind": "digital",
+  "year": 2024,
+  "transactions": [
+    {
+      "owner": "spouse",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Farmers & Merchants Bancorp, Inc. (FMAO)",
+      "transaction_date": "2024-01-22",
+      "notification_date": "2024-02-14",
+      "value_min": 1001,
+      "value_max": 15000,
+      "filing_status": "New",
+      "sub_owner": null,
+      "description": "dividend reinvestment",
+      "line_no": 1
+    }
+  ]
+}

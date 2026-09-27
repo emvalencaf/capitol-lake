@@ -1,0 +1,15 @@
+# Shared package plus one top-level package per Lambda, not one flat `capitol_lake` package
+
+The repo started with a single `src/capitol_lake` package, copied whole into every Lambda's Docker image (`COPY src/capitol_lake ${LAMBDA_TASK_ROOT}/capitol_lake` in every `docker/*.Dockerfile`). That meant every Lambda image shipped every other Lambda's code too — House's collector image carried Playwright-adjacent Senate-automation code it never imports, extract's image carried the House/Senate collectors, and so on — with no structural boundary stopping a future change from accidentally coupling two Lambdas that share nothing at runtime.
+
+Decided: split `src/capitol_lake` into `src/shared/` plus one top-level package per Lambda (`house_collect`, `senate_collect`, `senate_collect_automated`, `senate_akamai_probe`, `extract_data`, `stub`), each with its own `handler.py`. `src/shared/` holds only what genuinely crosses a Lambda-image boundary, found by tracing every cross-module import in the old package rather than guessing:
+
+- `schema.py`, `keys.py`, `llm_providers.py`, `bronze_write.py` — used by collect and extract alike.
+- `orchestration.py` — the SQS message contract *between* `house_collect` and `extract_data`; it can't live in either one.
+- `doc_id.py` (`route_doc_id`/`UnknownDocIdPrefixError`, split out of the old `stages/house_collect.py`) — House collection routes by it, and `extract_data` routes bronze keys by the same function.
+- `senate_index.py` (`SenateIndexEntry`/`parse_senate_index`/`senate_filing_url`/etc., split out of the old `stages/senate_collect.py`) — needed by `senate_collect`, `senate_collect_automated`, and `senate_akamai_probe` (which only needs the URL template) alike; none of those three own it outright.
+- `senate_efd_classification.py` (`classify_probe_result`/`ResponseOutcome`/the Lambda-safe Chromium launch args, split out of the old `browser/senate_efd_session.py`) — the pure classification logic `senate_akamai_probe` re-exports, kept separate from `senate_collect_automated`'s own Playwright session driver so the probe's image never needs Playwright at all.
+
+Everything else (`digital_extract.py`, `scanned_extract.py`, `senate_extract.py`, `ticker_resolve.py`, `llm_fallback.py`, `quality_gate.py`, `_house_form.py`, `evaluation.py`, `extract.py`) had exactly one Lambda consumer and moved into that Lambda's own package (`extract_data`) rather than `shared` — `evaluation.py`'s dev-only use by `scripts/run_house_eval.py`/`run_senate_eval.py` doesn't count, since those scripts aren't a Lambda image. Each Dockerfile now does two `COPY`s — `src/shared` plus that Lambda's own package — instead of one `COPY` of the whole tree, so a Lambda's image can only ever contain its own code and `shared`.
+
+`pyproject.toml`'s `[tool.hatch.build.targets.wheel].packages` lists all seven packages explicitly, since none of them nest under a single importable root anymore. Tests moved to mirror this layout (`tests/units/shared/`, `tests/units/<lambda-name>/`, see `tests/units/` and `tests/e2e/README.md`).

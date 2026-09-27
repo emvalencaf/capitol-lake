@@ -1,0 +1,63 @@
+{
+  "doc_id": "20023846",
+  "kind": "digital",
+  "year": 2023,
+  "transactions": [
+    {
+      "line_no": 1,
+      "owner": "dependent_child",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Cummins Inc. (CMI)",
+      "transaction_date": "2023-09-27",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2023-09-30",
+      "filing_status": "New",
+      "sub_owner": "Morgan Stanley Active Assets (5)",
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "dependent_child",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Cummins Inc. (CMI)",
+      "transaction_date": "2023-09-27",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2023-09-30",
+      "filing_status": "New",
+      "sub_owner": "Morgan Stanley Active Assets (6)",
+      "description": null
+    },
+    {
+      "line_no": 3,
+      "owner": "dependent_child",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "Target Corporation (TGT)",
+      "transaction_date": "2023-09-27",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2023-09-30",
+      "filing_status": "New",
+      "sub_owner": "Morgan Stanley Active Assets (5)",
+      "description": null
+    },
+    {
+      "line_no": 4,
+      "owner": "dependent_child",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "Target Corporation (TGT)",
+      "transaction_date": "2023-09-27",
+      "value_min": 1001,
+      "value_max": 15000,
+      "notification_date": "2023-09-30",
+      "filing_status": "New",
+      "sub_owner": "Morgan Stanley Active Assets (6)",
+      "description": null
+    }
+  ]
+}

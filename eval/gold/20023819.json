@@ -1,0 +1,35 @@
+{
+  "doc_id": "20023819",
+  "kind": "digital",
+  "year": 2023,
+  "transactions": [
+    {
+      "owner": "spouse",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Ares Capital Corporation - Closed End Fund (ARCC)",
+      "transaction_date": "2023-10-06",
+      "notification_date": "2023-10-06",
+      "value_min": 569.25,
+      "value_max": 569.25,
+      "filing_status": "New",
+      "sub_owner": "IRA One",
+      "description": "30 shares",
+      "line_no": 1
+    },
+    {
+      "owner": "spouse",
+      "transaction_type": "sale_full",
+      "asset_type": "stock",
+      "asset_description": "Warner Bros. Discovery, Inc. - Series A (WBD)",
+      "transaction_date": "2023-10-06",
+      "notification_date": "2023-10-06",
+      "value_min": 493.91,
+      "value_max": 493.91,
+      "filing_status": "New",
+      "sub_owner": "IRA One",
+      "description": "48 shares loss",
+      "line_no": 2
+    }
+  ]
+}

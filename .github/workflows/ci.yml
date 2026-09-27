@@ -24,12 +24,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+      - name: Install Tesseract
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr
       - name: Unicode
         run: git ls-files -z | xargs -0 uv run scripts/check_unicode.py
       - name: Ruff lint
         run: uvx ruff check .
       - name: Ruff format
         run: uvx ruff format --check .
+      - name: Tests
+        run: |
+          if [ -d tests ]; then
+            uv run pytest
+          fi
       - name: Wiki bundle
         run: |
           if [ -d .wiki ]; then

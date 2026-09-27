@@ -1,0 +1,77 @@
+{
+  "doc_id": "0632f542-7ac2-46e4-bd9c-603e3673f0cd",
+  "kind": "html",
+  "year": 2026,
+  "transactions": [
+    {
+      "line_no": 5,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Otis Worldwide Corporation Common Stock",
+      "transaction_date": "2026-08-27",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 4,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Tradr 2X Long SPY Monthly ETF",
+      "transaction_date": "2026-08-20",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 3,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "iShares Core S&P Small-Cap ETF",
+      "transaction_date": "2026-08-19",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 2,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "Avantis U.S. Small Cap Value ETF",
+      "transaction_date": "2026-08-19",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    },
+    {
+      "line_no": 1,
+      "owner": "joint",
+      "transaction_type": "purchase",
+      "asset_type": "stock",
+      "asset_description": "First Solar, Inc. - Common Stock",
+      "transaction_date": "2026-08-13",
+      "value_min": 1001.0,
+      "value_max": 15000.0,
+      "notification_date": null,
+      "filing_status": null,
+      "sub_owner": null,
+      "description": null
+    }
+  ]
+}
