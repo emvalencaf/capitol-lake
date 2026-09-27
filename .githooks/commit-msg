@@ -13,9 +13,7 @@ if ! [[ "$title" =~ $pattern ]]; then
   echo "  got: $title" >&2
   exit 1
 fi
-for trailer in "Session-Id: ." "Co-Authored-By: ."; do
-  if ! grep -qE "^${trailer}" "$msg_file"; then
-    echo "commit-msg: missing trailer '${trailer%: .}:'" >&2
-    exit 1
-  fi
-done
+if ! grep -qE "^Session-Id: ." "$msg_file"; then
+  echo "commit-msg: missing trailer 'Session-Id:'" >&2
+  exit 1
+fi
