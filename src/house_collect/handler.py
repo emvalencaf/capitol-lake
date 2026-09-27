@@ -77,9 +77,7 @@ def handler(event: dict, context: object) -> dict:
             event["year"],
             fetch_index=_fetch,
             fetch_filing=_fetch,
-            known_doc_ids=lambda: _known_doc_ids(
-                s3_client, f"bronze/house/year={event['year']}/"
-            ),
+            known_doc_ids=lambda: _known_doc_ids(s3_client, f"bronze/house/year={event['year']}/"),
             write_bytes=lambda key, data: _write_bytes(s3_client, key, data),
             now=lambda: datetime.now(UTC).isoformat(),
             on_progress=lambda progress: log_progress("house_collect", context, **progress),

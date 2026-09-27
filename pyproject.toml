@@ -39,6 +39,7 @@ select = ["E", "F", "W", "I", "B", "UP", "N", "RUF"]
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "python-dotenv>=1.2.3",
 ]
 
 [tool.pytest.ini_options]

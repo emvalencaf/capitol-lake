@@ -10,14 +10,26 @@ heading when `development` is released to `master`.
 ### Added
 
 - `extract_data.llm_extract.extract_llm` (#89): a benchmark-only extractor
-  that reads a House PTR's transactions directly via an LLM (Groq or a
-  local LM Studio model), distinct from the existing per-field
+  that reads a House PTR's transactions directly via an LLM (Groq, Gemini,
+  or a local LM Studio model), distinct from the existing per-field
   `llm_fallback` stage (ADR 0019). `scripts/run_house_eval.py` gains
-  `--extractor {tesseract,llm}`, `--provider`, `--model`, `--llm-input
-  {text,vision}`, `--llm-runs` (a consistency check across repeated
-  extractions, replacing the determinism check for LLM output) and
-  `--sample`, so a small LLM can be benchmarked against Tesseract on the
-  same gold set and report format.
+  `--extractor {tesseract,llm}`, `--provider {groq,gemini,lm_studio}`,
+  `--model`, `--llm-input {text,vision}`, `--llm-runs` (a consistency check
+  across repeated extractions, replacing the determinism check for LLM
+  output) and `--sample`, so a small LLM can be benchmarked against
+  Tesseract on the same gold set and report format.
+- `shared.llm_providers`: every Groq/Gemini call is now paced to its
+  model's free-tier limit (`RateLimiter`/`_rate_limiter_for`) before it's
+  sent, so a multi-filing `run_house_eval.py --extractor llm` run no longer
+  self-inflicts a 429 cascade by firing filings back-to-back faster than
+  the free tier allows. This is pacing, not retrying — still exactly one
+  attempt per filing, so it doesn't conflict with ADR 0019's "no automatic
+  retries on a provider failure." Pacing intervals are sourced from Groq's
+  own rate-limits table plus one empirically-observed sub-limit
+  (`qwen/qwen3.8-27b`'s free tier caps output tokens far below its
+  documented TPM) and, for Gemini, from a live 429 naming its real
+  constraint as a 20-requests-per-day-per-model quota rather than a
+  per-minute one.
 - `scripts/setup-github-env.sh`: `up`/`down` script that automates
   `infra/README.md`'s "One-time GitHub setup" step via `gh` — creates or
   removes the `production` GitHub Environment (with a required-reviewer
@@ -46,6 +58,16 @@ heading when `development` is released to `master`.
   `lambda:ListTags` on event source mappings) were missing outright. Verified
   by rerunning the `plan` job against `chore/setup-github-env-script`'s PR
   until it passed clean.
+- `shared.llm_providers`'s Gemini provider: `extract_llm`'s schema uses
+  JSON Schema's `{"type": ["string", "null"]}` nullable-union form, which
+  Gemini's `responseSchema` rejects outright (a 400: "Proto field is not
+  repeating, cannot start list") — every Gemini call failed before this.
+  `_to_gemini_schema` now converts it to Gemini's OpenAPI-subset form
+  (`{"type": "string", "nullable": true}`, recursively through
+  `properties`/`items`) before the call is sent. Also switched the default
+  Gemini model from `gemini-2.0-flash` (retired by Google; a live call now
+  404s) to `gemini-2.5-flash`, the newest model still on a workable free
+  tier.
 
 ### Changed
 

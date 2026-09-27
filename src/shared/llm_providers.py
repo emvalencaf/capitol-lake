@@ -29,6 +29,42 @@ This module performs real network I/O and is not unit-tested, per this
 codebase's handler convention (see `docs/local-dev.md`): the decision logic
 it wraps is `extract_data.llm_fallback`'s, which is tested against canned
 responses in `tests/test_llm_fallback.py`.
+
+## Free-tier pacing (`docs/metrics.md`'s "House LLM extractor benchmark")
+
+Groq and Gemini's free tiers both cap calls well below what
+`scripts/run_house_eval.py --extractor llm`'s per-filing loop fires them at,
+so every `groq`/`gemini` call is paced by `_rate_limiter_for` to its
+model's free-tier limit before this module ever sends it. This is pacing,
+not retrying: exactly one attempt is still made per filing, just spaced out
+enough to not be an avoidable rate-limit failure — it doesn't conflict with
+ADR 0019's "no automatic retries on a provider failure" (a rate limit hit
+despite pacing is still surfaced uncaught, same as before).
+
+`_FREE_TIER_MIN_INTERVAL_SECONDS` below is sourced 2026-09-27:
+
+- **Groq**: from Groq's own console (`https://console.groq.com/docs/rate-limits`,
+  which still publishes a concrete free-tier table: 30 RPM / 8K TPM for most
+  models). `qwen/qwen3.8-27b`'s interval is wider than that table would
+  suggest: a live 429 from this model named a separate, undocumented
+  ~1000-output-tokens/minute sub-limit (reasoning models emit chain-of-thought
+  tokens before their JSON answer, so a single call's real output-token cost
+  is far higher than the JSON payload alone), and one call against this
+  benchmark's schema already requests ~900+ of that — so it's paced by the
+  empirically-observed limit, not the published one.
+- **Gemini**: a per-minute `min_interval` cannot actually fix Gemini's real
+  constraint. A live 429 body named the binding quota as
+  `GenerateRequestsPerDayPerProjectPerModel-FreeTier`, value **20** — 20
+  requests per *day*, per model, per project, confirmed directly against the
+  API on this date, not a third-party estimate. `gemini-2.0-flash` (this
+  module's old default) has since been retired outright (a live call now
+  404s telling callers to move to `gemini-3.8-flash`), and both
+  `gemini-2.5-flash` (the current default) and `gemini-3.8-flash` sit behind
+  this same 20/day cap. Older third-party-reported RPM/TPM figures for these
+  models describe a more generous free tier Google has since tightened —
+  don't trust them over this. A full 30-digital-filing House benchmark
+  cannot complete against Gemini's free tier in a single day; treat a
+  Gemini run here as a small spot-check, not a benchmark round.
 """
 
 from __future__ import annotations
@@ -36,8 +72,9 @@ from __future__ import annotations
 import base64
 import json
 import os
+import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.request import Request, urlopen
 
@@ -45,8 +82,41 @@ USER_AGENT = "capitol-lake LLM fallback (contact: edsonmvf@gmail.com)"
 
 _DEFAULT_LM_STUDIO_BASE_URL = "http://localhost:1234/v1"
 _DEFAULT_LM_STUDIO_MODEL = "gemma-3-27b-it"
-_DEFAULT_GEMINI_MODEL = "gemini-2.0-flash"
+# `gemini-2.0-flash` was retired by Google (a live call now 404s: "This model
+# ... is no longer available"). `gemini-3.8-flash`, its suggested successor,
+# has a free tier too thin to benchmark against (~20 requests/*day*, per
+# Google's own developer forum) — `gemini-2.5-flash` is the newest model
+# still on a workable free tier, confirmed live 2026-09-27.
+_DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 _DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+
+# provider name -> model -> minimum seconds between calls to that model.
+_FREE_TIER_MIN_INTERVAL_SECONDS: dict[str, dict[str, float]] = {
+    "groq": {
+        # 30 RPM / 8K TPM (console.groq.com/docs/rate-limits, 2026-09-27).
+        "llama-3.3-70b-versatile": 2.0,
+        "openai/gpt-oss-20b": 2.0,
+        "openai/gpt-oss-120b": 2.0,
+        # Empirically ~1 call/minute (see module docstring); 30 RPM alone
+        # under-paces this reasoning model badly.
+        "qwen/qwen3.8-27b": 75.0,
+    },
+    "gemini": {
+        # Confirmed directly from a live 429 body 2026-09-27 (not a
+        # third-party estimate): both models are capped at
+        # `GenerateRequestsPerDayPerProjectPerModel-FreeTier`, quotaValue
+        # 20 -- 20 requests/*day*, per model, per project. That's a daily
+        # quota, not a per-minute one, so no `min_interval` here actually
+        # makes a multi-filing benchmark practical; these values only
+        # smooth out a burst of calls within whatever's left of the day's
+        # 20. Earlier third-party RPM/TPM figures for these models (and for
+        # the now-retired `gemini-2.0-flash`) reflect a more generous free
+        # tier Google has since tightened; do not trust them over this.
+        "gemini-2.5-flash": 6.0,
+        "gemini-3.8-flash": 4.0,
+    },
+}
+_DEFAULT_MIN_INTERVAL_SECONDS = 2.0
 
 _GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 _GROQ_BASE_URL = "https://api.groq.com/openai/v1"
@@ -54,6 +124,44 @@ _GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 class VisionUnsupportedError(NotImplementedError):
     """A provider's `complete_vision` was called but the provider has no vision-capable model."""
+
+
+@dataclass
+class RateLimiter:
+    """Sleeps as needed to keep calls to `wait()` at least `min_interval` apart.
+
+    Paces a provider call to its own published (or empirically-observed)
+    free-tier limit before the call is made — see the module docstring's
+    "Free-tier pacing" section for why this isn't the retry ADR 0019 rejects.
+    """
+
+    min_interval: float = 0.0
+    clock: Callable[[], float] = time.monotonic
+    sleep: Callable[[float], None] = time.sleep
+    _last_call: float | None = field(default=None, init=False, repr=False)
+
+    def wait(self) -> None:
+        now = self.clock()
+        if self._last_call is not None:
+            remaining = self.min_interval - (now - self._last_call)
+            if remaining > 0:
+                self.sleep(remaining)
+                now = self.clock()
+        self._last_call = now
+
+
+_rate_limiters: dict[tuple[str, str], RateLimiter] = {}
+
+
+def _rate_limiter_for(provider_name: str, model: str) -> RateLimiter:
+    """The shared `RateLimiter` for this provider+model, created on first use."""
+    key = (provider_name, model)
+    if key not in _rate_limiters:
+        interval = _FREE_TIER_MIN_INTERVAL_SECONDS.get(provider_name, {}).get(
+            model, _DEFAULT_MIN_INTERVAL_SECONDS
+        )
+        _rate_limiters[key] = RateLimiter(min_interval=interval)
+    return _rate_limiters[key]
 
 
 @dataclass(frozen=True)
@@ -132,7 +240,31 @@ def _lm_studio_complete_vision(
 # --- Gemini (generateContent, free tier) -------------------------------------
 
 
+def _to_gemini_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Convert a `{"type": ["string", "null"]}`-style schema to Gemini's OpenAPI-subset form.
+
+    Gemini's `responseSchema` rejects that JSON Schema nullable-union shape
+    outright (a real 400: "Proto field is not repeating, cannot start
+    list") and has no `additionalProperties` field either. Recurses through
+    `properties`/`items` since a nested `Transaction` field
+    (`extract_data.llm_extract.transaction_schema`) uses the same nullable
+    pattern as the top-level page schema.
+    """
+    out = {k: v for k, v in schema.items() if k != "additionalProperties"}
+    type_ = out.get("type")
+    if isinstance(type_, list):
+        non_null = [t for t in type_ if t != "null"]
+        out["type"] = non_null[0] if len(non_null) == 1 else non_null
+        out["nullable"] = True
+    if "properties" in out:
+        out["properties"] = {k: _to_gemini_schema(v) for k, v in out["properties"].items()}
+    if "items" in out:
+        out["items"] = _to_gemini_schema(out["items"])
+    return out
+
+
 def _gemini_generate(model: str, contents: list[dict], schema: dict[str, Any]) -> dict[str, Any]:
+    _rate_limiter_for("gemini", model).wait()
     api_key = os.environ["GEMINI_API_KEY"]
     body = _post_json(
         f"{_GEMINI_BASE_URL}/{model}:generateContent",
@@ -140,7 +272,7 @@ def _gemini_generate(model: str, contents: list[dict], schema: dict[str, Any]) -
             "contents": contents,
             "generationConfig": {
                 "responseMimeType": "application/json",
-                "responseSchema": {k: v for k, v in schema.items() if k != "additionalProperties"},
+                "responseSchema": _to_gemini_schema(schema),
             },
         },
         headers={"X-Goog-Api-Key": api_key},
@@ -179,6 +311,7 @@ def _gemini_complete_vision(
 
 def _groq_complete_text(prompt: str, source_text: str, schema: dict[str, Any]) -> dict[str, Any]:
     model = os.environ.get("GROQ_MODEL", _DEFAULT_GROQ_MODEL)
+    _rate_limiter_for("groq", model).wait()
     messages = [{"role": "user", "content": f"{prompt}\n\nFiling text:\n{source_text}"}]
     return _openai_compatible_chat(
         _GROQ_BASE_URL, model, messages, schema, api_key=os.environ["GROQ_API_KEY"]
