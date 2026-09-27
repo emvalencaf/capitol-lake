@@ -7,6 +7,16 @@ heading when `development` is released to `master`.
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/setup-github-env.sh`: `up`/`down` script that automates
+  `infra/README.md`'s "One-time GitHub setup" step via `gh` — creates or
+  removes the `production` GitHub Environment (with a required-reviewer
+  gate) and the `AWS_ROLE_ARN`/`TF_STATE_BUCKET`/`FINOPS_ALERT_EMAIL` repo
+  secrets `infra-cicd.yml` reads. `down --purge-history` additionally
+  deletes the workflow's run history and the Environment's deployment
+  records.
+
 ### Changed
 
 - `src/`: split the single `src/capitol_lake` package into `src/shared/`

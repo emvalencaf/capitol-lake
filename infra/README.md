@@ -79,6 +79,33 @@ ticker resolution API keys) is a separate, manual post-apply step — see
 
 ### 2. One-time GitHub setup
 
+`scripts/setup-github-env.sh up` automates this whole step against the
+GitHub API via `gh` (must be authenticated: `gh auth status`):
+
+```bash
+cd ..
+GH_REVIEWER=your-github-username \
+FINOPS_ALERT_EMAIL=you@example.com \
+  scripts/setup-github-env.sh up
+```
+
+It reads `infra/bootstrap`'s `github_actions_role_arn` / `state_bucket_name`
+outputs, creates (or updates) the `production` GitHub Environment with
+`GH_REVIEWER` (comma-separated for more than one) as its required reviewer,
+and sets the three secrets below. Run `scripts/setup-github-env.sh down` to
+remove them again — add `--purge-history` to also delete every
+`infra-cicd.yml` workflow run and every deployment recorded against the
+Environment (irreversible; asks for a second confirmation). See the script's
+own header comment for every flag and env var.
+
+GitHub's required-reviewer protection rule needs GitHub Team/Enterprise on
+a **private** repo (public repos get it on any plan, ADR-0009's Phase 3
+plan) — if `up` 422s on that, either upgrade the plan, make the repo
+public, or pass `--no-reviewer` to create the Environment without the gate
+for now.
+
+Equivalently, by hand:
+
 - Create a GitHub Environment named `production` (repo Settings >
   Environments) with a required reviewer added under **Deployment
   protection rules**. This Environment is what actually gates `apply` — the
